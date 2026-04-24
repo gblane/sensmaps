@@ -24,12 +24,19 @@ of a detected optical signal `Y` with respect to local absorption changes — "s
 
 ### 3.1 Physics
 
-Port the CW continuous-wave path-length integrals for single-distance intensity (`CW_SD_I`) from `DOIT-Public/SensitivityCompendium/deps/`:
+Port the diffuse-optical analytical formulas from `DOIT-Public/SensitivityCompendium/deps/`. The MATLAB `continuous*` functions are **thin wrappers** that call `complex*` with `omega=0`, so the Python port mirrors that structure:
 
-- `continuousTotPathLen.m` → `continuous_tot_path_len`
-- `continuousPartPathLen.m` → `continuous_part_path_len`
+- `n2A.m` → `n2a`
+- `complexFluence.m` → `complex_fluence`
+- `complexReflectance.m` → `complex_reflectance`
+- `complexTotPathLen.m` → `complex_tot_path_len`
+- `complexPartPathLen.m` → `complex_part_path_len`
+- `continuousFluence.m` → `continuous_fluence` (wrapper, ω=0)
+- `continuousReflectance.m` → `continuous_reflectance` (wrapper, ω=0)
+- `continuousTotPathLen.m` → `continuous_tot_path_len` (wrapper, ω=0)
+- `continuousPartPathLen.m` → `continuous_part_path_len` (wrapper, ω=0)
 
-Both are real-valued CW closed-form analytical solutions. They are used rather than the `complex*` forms at ω=0 because real arithmetic is strictly faster than complex arithmetic in NumPy with no precision loss at ω=0. If empirical benchmarking in implementation shows the `complex*`-at-ω=0 path is faster for some reason (unlikely), we may switch; default is `continuous*`.
+Implementing the `complex*` forms in v1 (even though only CW is used) pays forward to v2 — FD measurements reuse the same functions with non-zero ω. At ω=0 the imaginary parts vanish, and the wrappers return `.real` so downstream code deals in real arrays.
 
 The v1 sensitivity is then
 
