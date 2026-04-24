@@ -1,0 +1,21 @@
+﻿I would like to create an interactive gui program (guessing in python) which takes inputs numerical inputs, runs a simulation or calculates something, and then plots the result. Basically a custom graphing calculator to test parameters of a specific equation.
+
+I already have all of the physics (the equations I want to use) coded in matlab. I also have some matlab code to create the plots or visualizations I want.
+
+This is all to plot 2d colormaps of the jacobian of a detected optical signal with respect to local mua changes. I typically call these “sensitivity maps” or “sensitivity to absorption change maps”.
+
+To start create a new github repository (private) for this project. We are currently in my base GitHub folder, so put the new repository here.
+
+
+
+We can work through actually making the program together, but to give you an idea of what I’m thinking, here are various resources related to the project:
+- A paper I wrote that is extremely relevant to this project. I basically want to make a program that creates the figures in this paper using the code from this paper: /home/giles/TuftsBox_local/DOIT/Writing/JIOHS/2023_sensReview
+- My main toolbox (do not touch this, only read it): /home/giles/GitHub/DOIT-Toolbox
+- Our complementary public toolbox (do not touch this, only read it): /home/giles/GitHub/DOIT-Public
+- - which contains the code from the aforementioned paper: /home/giles/GitHub/DOIT-Public/SensitivityCompendium
+
+Given this, you may have all you need, but ask me questions along the way.
+
+
+
+The first priority for this program scope-wise, is ease of installation – simply running a python script preferred
