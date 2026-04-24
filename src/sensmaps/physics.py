@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
+
 
 C_MM_PER_SEC = 2.99792458e11  # speed of light in vacuum, mm/sec
 
@@ -54,3 +56,43 @@ def n2a(n_in: float, n_out: float) -> float:
             + 1.171382 * dan12**4
         )
     return 1.0
+
+
+def _unpack_source(rs):
+    """Canonicalize rs to a (1,3) float array; return (x0, y0, z0)."""
+    rs = np.atleast_2d(np.asarray(rs, dtype=np.float64))
+    if rs.shape != (1, 3):
+        raise ValueError(f"rs must be (1,3); got shape {rs.shape}")
+    return rs, float(rs[0, 0]), float(rs[0, 1]), float(rs[0, 2])
+
+
+def complex_fluence(rs, r, omega: float, opt_prop: OpticalProperties):
+    """Complex fluence at positions r from a source at rs. Port of complexFluence.m.
+
+    Parameters
+    ----------
+    rs        : array-like, shape (1, 3) or (3,)   — source coords [mm]
+    r         : array-like, shape (N, 3) or (3,)   — detector-volume coords [mm]
+    omega     : float                              — angular modulation freq [rad/sec]
+    opt_prop  : OpticalProperties
+
+    Returns
+    -------
+    phi : complex ndarray, shape (N,)  — fluence [1/mm^2]
+    """
+    rs, x0, y0, z0 = _unpack_source(rs)
+    r = np.atleast_2d(np.asarray(r, dtype=np.float64))
+
+    v = C_MM_PER_SEC / opt_prop.n_in
+    a_mismatch = n2a(opt_prop.n_in, opt_prop.n_out)
+    D = 1.0 / (3.0 * opt_prop.musp)
+    zb = -2.0 * a_mismatch * D
+
+    mueff = np.sqrt(opt_prop.mua / D - 1j * omega / (v * D))
+
+    rsp = np.array([[x0, y0, -z0 + 2.0 * zb]])
+
+    r1 = np.linalg.norm(r - rs, axis=1)
+    r2 = np.linalg.norm(r - rsp, axis=1)
+
+    return (np.exp(-mueff * r1) / r1 - np.exp(-mueff * r2) / r2) / (4.0 * np.pi * D)

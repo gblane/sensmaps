@@ -21,3 +21,25 @@ def test_n2a_matches_matlab(cw_sd_i_ref):
 
 def test_n2a_unit_case_is_one():
     assert n2a(1.0, 1.0) == 1.0
+
+
+def _opt_prop_from_ref(ref) -> OpticalProperties:
+    return OpticalProperties(
+        n_in=float(ref["nin"]),
+        n_out=float(ref["nout"]),
+        musp=float(ref["musp"]),
+        mua=float(ref["mua"]),
+    )
+
+
+def test_complex_fluence_cw_matches_matlab(cw_sd_i_ref):
+    from sensmaps.physics import complex_fluence
+    ref = cw_sd_i_ref
+    op = _opt_prop_from_ref(ref)
+    rs = np.asarray(ref["rs"], dtype=float).reshape(1, 3)
+    r_test = np.asarray(ref["r_test"], dtype=float).reshape(1, 3)
+    phi_ref = complex(ref["phi_test_cw"])
+
+    phi = complex_fluence(rs, r_test, 0.0, op)
+    assert phi.shape == (1,)
+    np.testing.assert_allclose(phi[0], phi_ref, rtol=1e-10, atol=0)
