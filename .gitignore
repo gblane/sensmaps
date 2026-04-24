@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Runtime artifacts
+last_session.json
+*.npz
+
+# Large local test fixtures (not committed)
+tests/fixtures/CW_l_L.mat
+tests/fixtures/DSsetSDSSDSsen.mat
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
