@@ -56,3 +56,18 @@ def test_complex_reflectance_cw_matches_matlab(cw_sd_i_ref):
     R = complex_reflectance(rs, rd, 0.0, op)
     assert R.shape == (1,)
     np.testing.assert_allclose(R[0], R_ref, rtol=1e-10, atol=0)
+
+
+def test_complex_tot_path_len_cw_matches_matlab(cw_sd_i_ref):
+    from sensmaps.physics import complex_tot_path_len
+    ref = cw_sd_i_ref
+    op = _opt_prop_from_ref(ref)
+    rs = np.asarray(ref["rs"], dtype=float).reshape(1, 3)
+    rd = np.asarray(ref["rd"], dtype=float).reshape(1, 3)
+    L_ref = complex(ref["L_test_cw"])
+
+    L, R = complex_tot_path_len(rs, rd, 0.0, op)
+    assert L.shape == (1,)
+    np.testing.assert_allclose(L[0], L_ref, rtol=1e-10, atol=0)
+    # At omega=0 the imaginary part is numerically zero
+    assert abs(L[0].imag) < 1e-12

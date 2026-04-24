@@ -131,3 +131,36 @@ def complex_reflectance(rs, rd, omega: float, opt_prop: OpticalProperties):
         z0 * (1.0 / r1 + mueff) * np.exp(-mueff * r1) / r1**2
         + (z0 - 2.0 * zb) * (1.0 / r2 + mueff) * np.exp(-mueff * r2) / r2**2
     ) / (4.0 * np.pi)
+
+
+def complex_tot_path_len(rs, rd, omega: float, opt_prop: OpticalProperties):
+    """Complex total path length and reflectance. Port of complexTotPathLen.m.
+
+    Returns
+    -------
+    L : complex ndarray, shape (N,) — total path length [mm]
+    R : complex ndarray, shape (N,) — reflectance [1/mm^2]
+    """
+    rs, x0, y0, z0 = _unpack_source(rs)
+    rd = np.atleast_2d(np.asarray(rd, dtype=np.float64))
+
+    v = C_MM_PER_SEC / opt_prop.n_in
+    a_mismatch = n2a(opt_prop.n_in, opt_prop.n_out)
+    D = 1.0 / (3.0 * opt_prop.musp)
+    zb = -2.0 * a_mismatch * D
+
+    mueff = np.sqrt(opt_prop.mua / D - 1j * omega / (v * D))
+
+    rsp = np.array([[x0, y0, -z0 + 2.0 * zb]])
+
+    r1 = np.linalg.norm(rd - rs, axis=1)
+    r2 = np.linalg.norm(rd - rsp, axis=1)
+
+    R = complex_reflectance(rs, rd, omega, opt_prop)
+
+    L = (
+        (z0 / r1) * np.exp(-mueff * r1)
+        + ((z0 - 2.0 * zb) / r2) * np.exp(-mueff * r2)
+    ) / (8.0 * np.pi * D * R)
+
+    return L, R
