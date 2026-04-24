@@ -43,3 +43,16 @@ def test_complex_fluence_cw_matches_matlab(cw_sd_i_ref):
     phi = complex_fluence(rs, r_test, 0.0, op)
     assert phi.shape == (1,)
     np.testing.assert_allclose(phi[0], phi_ref, rtol=1e-10, atol=0)
+
+
+def test_complex_reflectance_cw_matches_matlab(cw_sd_i_ref):
+    from sensmaps.physics import complex_reflectance
+    ref = cw_sd_i_ref
+    op = _opt_prop_from_ref(ref)
+    rs = np.asarray(ref["rs"], dtype=float).reshape(1, 3)
+    rd = np.asarray(ref["rd"], dtype=float).reshape(1, 3)
+    R_ref = complex(ref["R_test_cw"])
+
+    R = complex_reflectance(rs, rd, 0.0, op)
+    assert R.shape == (1,)
+    np.testing.assert_allclose(R[0], R_ref, rtol=1e-10, atol=0)
