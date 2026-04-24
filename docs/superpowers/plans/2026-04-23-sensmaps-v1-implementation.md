@@ -17,6 +17,7 @@
 **Files:**
 - Create: `/home/giles/GitHub/sensmaps/.gitignore`
 - Create: `/home/giles/GitHub/sensmaps/pyproject.toml`
+- Create: `/home/giles/GitHub/sensmaps/README.md` (stub — replaced in Task 18)
 - Create: `/home/giles/GitHub/sensmaps/src/sensmaps/__init__.py`
 - Create: `/home/giles/GitHub/sensmaps/src/sensmaps/__main__.py`
 
@@ -107,7 +108,17 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 5: Create a venv, install the package editable**
+- [ ] **Step 5: Create `README.md` (stub only — replaced by the real README in Task 18)**
+
+`pyproject.toml` references `README.md` via `readme = "README.md"`, and the hatchling backend fails `pip install -e .` when that file is missing. Create a one-line stub now; Task 18 overwrites it with the real README:
+
+```markdown
+# sensmaps
+
+Interactive GUI for 2D sensitivity maps in diffuse optical imaging. See the implementation plan in `docs/superpowers/plans/` during development. Full README lands at Task 18.
+```
+
+- [ ] **Step 6: Create a venv, install the package editable**
 
 Run:
 ```bash
@@ -118,7 +129,7 @@ pip install -e .[dev]
 ```
 Expected: `pip install` succeeds; the last lines include `Successfully installed sensmaps-0.1.0 ...`.
 
-- [ ] **Step 6: Smoke-check install via the console script**
+- [ ] **Step 7: Smoke-check install via the console script**
 
 The console-script calls `main` which does not import the package layers, so it works before the other tasks:
 ```bash
@@ -126,10 +137,10 @@ sensmaps
 ```
 Expected: prints `sensmaps (stub): GUI launch is wired up in Task 17.` and exits 0.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add .gitignore pyproject.toml src/sensmaps/__init__.py src/sensmaps/__main__.py
+git add .gitignore pyproject.toml README.md src/sensmaps/__init__.py src/sensmaps/__main__.py
 git commit -m "feat: project scaffolding (pyproject, package layout, entry stub)
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
@@ -2575,9 +2586,9 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 ## Task 18: README
 
 **Files:**
-- Create: `/home/giles/GitHub/sensmaps/README.md`
+- Modify: `/home/giles/GitHub/sensmaps/README.md` (replaces the stub written in Task 1)
 
-- [ ] **Step 1: Create `README.md`**
+- [ ] **Step 1: Overwrite `README.md`**
 
 ```markdown
 # sensmaps
