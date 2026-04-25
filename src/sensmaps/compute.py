@@ -150,7 +150,11 @@ def make_s_full(
         raise NotImplementedError(
             f"type_str={type_str!r} is not implemented in v1 (only CW_SD_I)"
         )
-    if pert[0] % dr or pert[1] % dr or pert[2] % dr:
+    # `pert % dr == 0` looks right but is a float-arithmetic trap
+    # (1.0 % 0.1 == 0.09999...). Compare against the nearest integer multiple
+    # of dr instead, with a small relative tolerance.
+    _tol = 1e-9 * max(dr, 1.0)
+    if any(abs(p - round(p / dr) * dr) > _tol for p in pert):
         raise ValueError(f"pert {pert} must be a multiple of dr={dr}")
 
     params = GridParams.from_limits(xl=xl, yl=yl, zl=zl, dr=dr, pert=pert)
