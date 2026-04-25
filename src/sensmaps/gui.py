@@ -61,6 +61,7 @@ PARAM_CLASS: dict[str, str] = {
     "zl": "expensive",
     "dr": "expensive",
     "pert": "cheap",
+    "pert_override": "cheap",
     "slice_axis": "cheap",
     "slice_value": "cheap",
     "quantiles": "cheap",
@@ -271,8 +272,25 @@ class ParameterPanel:
             "quantiles": _parse_float_list(v["quantiles"].get(), 2),
         }
 
+    _VALID_KEYS = frozenset(_DEFAULTS.keys())
+    _VALID_OPT_PROP_KEYS = frozenset(("n_in", "n_out", "musp", "mua"))
+
     def set_values(self, values: dict[str, Any]) -> None:
         def _fmt_list(xs): return " ".join(f"{x:g}" for x in xs)
+
+        unknown = set(values) - self._VALID_KEYS
+        if unknown:
+            raise ValueError(
+                f"Unknown keys in set_values: {sorted(unknown)}; "
+                f"expected subset of {sorted(self._VALID_KEYS)}"
+            )
+        if "opt_prop" in values:
+            unknown_op = set(values["opt_prop"]) - self._VALID_OPT_PROP_KEYS
+            if unknown_op:
+                raise ValueError(
+                    f"Unknown opt_prop keys: {sorted(unknown_op)}; "
+                    f"expected subset of {sorted(self._VALID_OPT_PROP_KEYS)}"
+                )
 
         if "type_str" in values:
             self._vars["type_str"].set(values["type_str"])
@@ -311,7 +329,9 @@ from tkinter import filedialog, messagebox
 
 import numpy as np
 
-from sensmaps.compute import make_s_full
+from dataclasses import replace as _replace
+
+from sensmaps.compute import apply_pert_kernel, make_s_full
 from sensmaps.physics import OpticalProperties
 
 
@@ -410,26 +430,22 @@ class MainWindow:
         except Exception:
             return
         try:
-            S = self._cache.S
-            # Pert is cheap: re-conv Svox with new kernel before slicing
+            # Pert is cheap: re-conv Svox with new kernel before slicing.
             if name == "pert" and list(values["pert"]) != list(self._cache.pert):
-                from scipy.signal import fftconvolve
-                dr = self._cache.dr
-                kernel_shape = tuple(int(round(p / dr)) for p in values["pert"])
-                H = np.ones(kernel_shape, dtype=np.float64)
-                S = fftconvolve(self._cache.Svox, H, mode="same")
-                # Update cache's S and pert
-                self._cache.S = S
-                self._cache.pert = tuple(values["pert"])
+                new_pert = tuple(values["pert"])
+                S_new = apply_pert_kernel(
+                    self._cache.Svox, new_pert, self._cache.dr,
+                )
+                self._cache = _replace(self._cache, S=S_new, pert=new_pert)
             self.plot_canvas.show(
-                S=S,
+                S=self._cache.S,
                 params=self._cache.params,
                 axis=values["slice_axis"],
                 value=values["slice_value"],
                 quantiles=tuple(values["quantiles"]),
                 rs=self._cache.rs,
                 rd=self._cache.rd,
-                pert=tuple(values["pert"]),
+                pert=self._cache.pert,
             )
         except Exception:
             # A bad render shouldn't kill the live-update path; log to stderr.
@@ -533,6 +549,7 @@ class MainWindow:
             return
         try:
             values = json.loads(SESSION_FILE.read_text())
+            self.params_panel.set_values(values)
         except Exception:
+            # Corrupt or schema-incompatible session — leave panel at defaults.
             return
-        self.params_panel.set_values(values)

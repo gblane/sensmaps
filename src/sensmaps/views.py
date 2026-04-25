@@ -8,12 +8,23 @@ import numpy as np
 
 @dataclass(frozen=True)
 class PlotParams:
-    """Axis metadata for a 2D slice. Mirror of MATLAB plotParams struct."""
+    """Axis metadata for a 2D slice. Mirror of MATLAB plotParams struct.
+
+    `horz_axis_name`, `vert_axis_name`, `slice_axis_name` are 'x', 'y', or 'z' —
+    used by `render_slice` to project optode coordinates onto the plane and
+    decide which optodes intersect the slice. `slice_dr` is the voxel size,
+    used as the in-plane tolerance for optode visibility.
+    """
 
     horz_axis: np.ndarray
     horz_label: str
+    horz_axis_name: str
     vert_axis: np.ndarray
     vert_label: str
+    vert_axis_name: str
+    slice_axis_name: str
+    slice_value: float
+    slice_dr: float
 
 
 def slice_s(S: np.ndarray, params, axis: str, value: float):
@@ -37,24 +48,35 @@ def slice_s(S: np.ndarray, params, axis: str, value: float):
 
     axis_vec = getattr(params, axis)
     idx = int(np.argmin(np.abs(axis_vec - value)))
+    snapped_value = float(axis_vec[idx])
+
+    # Infer voxel size from any non-degenerate axis. The slice axis itself may
+    # be a single point (e.g. yl=[0,0]); fall back to the first axis with >=2.
+    dr = next(
+        (float(v[1] - v[0]) for v in (params.x, params.y, params.z) if v.size >= 2),
+        1.0,
+    )
 
     if axis == "x":
         plane = S[idx, :, :].T
         pp = PlotParams(
-            horz_axis=params.y, horz_label="$y$ (mm)",
-            vert_axis=params.z, vert_label="$z$ (mm)",
+            horz_axis=params.y, horz_label="$y$ (mm)", horz_axis_name="y",
+            vert_axis=params.z, vert_label="$z$ (mm)", vert_axis_name="z",
+            slice_axis_name="x", slice_value=snapped_value, slice_dr=dr,
         )
     elif axis == "y":
         plane = S[:, idx, :].T
         pp = PlotParams(
-            horz_axis=params.x, horz_label="$x$ (mm)",
-            vert_axis=params.z, vert_label="$z$ (mm)",
+            horz_axis=params.x, horz_label="$x$ (mm)", horz_axis_name="x",
+            vert_axis=params.z, vert_label="$z$ (mm)", vert_axis_name="z",
+            slice_axis_name="y", slice_value=snapped_value, slice_dr=dr,
         )
     else:  # z
         plane = S[:, :, idx].T
         pp = PlotParams(
-            horz_axis=params.x, horz_label="$x$ (mm)",
-            vert_axis=params.y, vert_label="$y$ (mm)",
+            horz_axis=params.x, horz_label="$x$ (mm)", horz_axis_name="x",
+            vert_axis=params.y, vert_label="$y$ (mm)", vert_axis_name="y",
+            slice_axis_name="z", slice_value=snapped_value, slice_dr=dr,
         )
     return plane, pp
 
@@ -130,12 +152,12 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, rs=None, rd=None, pert=(1
     )
     fig = ax.figure
     colorbar = fig.colorbar(image, ax=ax)
-    
-    # Dynamic colorbar label
-    p_str = f"{pert[0]:g} x {pert[1]:g} x {pert[2]:g}"
-    colorbar.set_label(f"S to a ( {p_str} ) $mm^3$ absorption perturbation")
 
-    # Title with LaTeX and new line
+    p_str = f"{pert[0]:g} x {pert[1]:g} x {pert[2]:g}"
+    colorbar.set_label(
+        rf"$\mathcal{{S}}$ to a ( {p_str} ) $mm^3$ absorption perturbation"
+    )
+
     ax.set_title(r"$\mathcal{S} = \partial \mu_{a,meas} / \partial \mu_{a,pert}$" "\n"
                  r"fractional measurement sensitivity to absorption perturbations",
                  fontsize=10)
@@ -144,9 +166,7 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, rs=None, rd=None, pert=(1
     # degenerate — matplotlib.contour requires a (>=2, >=2) array.
     contour = None
     if S_plane.shape[0] >= 2 and S_plane.shape[1] >= 2:
-        levels = colorbar.get_ticks()
-        # Filter levels to be within clim to avoid warnings
-        levels = [v for v in levels if clim[0] <= v <= clim[1]]
+        levels = [v for v in colorbar.get_ticks() if clim[0] <= v <= clim[1]]
         if levels:
             contour = ax.contour(
                 plot_params.horz_axis, plot_params.vert_axis, S_plane,
@@ -155,42 +175,39 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, rs=None, rd=None, pert=(1
                 linewidths=0.8,
             )
 
-    # Plot optodes if provided
-    # Identify labels to find coordinates
-    h_lab = plot_params.horz_label.lower()
-    v_lab = plot_params.vert_label.lower()
-    
-    def get_indices(lab):
-        if 'x' in lab: return 0
-        if 'y' in lab: return 1
-        if 'z' in lab: return 2
-        return None
+    _AXIS_IDX = {"x": 0, "y": 1, "z": 2}
+    h_idx = _AXIS_IDX[plot_params.horz_axis_name]
+    v_idx = _AXIS_IDX[plot_params.vert_axis_name]
+    s_idx = _AXIS_IDX[plot_params.slice_axis_name]
+    half_dr = plot_params.slice_dr / 2.0
 
-    h_idx = get_indices(h_lab)
-    v_idx = get_indices(v_lab)
-    
+    def _in_plane(coords: np.ndarray) -> np.ndarray:
+        return np.abs(coords[:, s_idx] - plot_params.slice_value) <= half_dr
+
     sources_artist = None
     if rs is not None:
         rs = np.atleast_2d(rs)
-        sources_artist = ax.scatter(
-            rs[:, h_idx], rs[:, v_idx],
-            marker='v', color='red', s=50, label='Sources', edgecolors='white',
-            zorder=10
-        )
+        mask = _in_plane(rs)
+        if mask.any():
+            sources_artist = ax.scatter(
+                rs[mask, h_idx], rs[mask, v_idx],
+                marker="v", color="red", s=50, edgecolors="white", zorder=10,
+            )
 
     detectors_artist = None
     if rd is not None:
         rd = np.atleast_2d(rd)
-        detectors_artist = ax.scatter(
-            rd[:, h_idx], rd[:, v_idx],
-            marker='^', color='blue', s=50, label='Detectors', edgecolors='white',
-            zorder=10
-        )
+        mask = _in_plane(rd)
+        if mask.any():
+            detectors_artist = ax.scatter(
+                rd[mask, h_idx], rd[mask, v_idx],
+                marker="^", color="blue", s=50, edgecolors="white", zorder=10,
+            )
 
     ax.set_xlabel(plot_params.horz_label)
     ax.set_ylabel(plot_params.vert_label)
     # When the vertical axis is depth (z), put z=0 at the top — NIRS convention.
-    if "$z$" in plot_params.vert_label:
+    if plot_params.vert_axis_name == "z":
         ax.invert_yaxis()
     ax.set_aspect("equal", adjustable="box")
 

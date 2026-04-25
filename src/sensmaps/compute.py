@@ -95,6 +95,15 @@ from sensmaps.physics import (
 )
 
 
+def apply_pert_kernel(
+    Svox: np.ndarray, pert: Sequence[float], dr: float
+) -> np.ndarray:
+    """Convolve `Svox` with a uniform box kernel sized `pert` (in mm)."""
+    kernel_shape = tuple(int(round(p / dr)) for p in pert)
+    H = np.ones(kernel_shape, dtype=np.float64)
+    return fftconvolve(Svox, H, mode="same")
+
+
 @dataclass
 class SensitivityResult:
     """Return type of make_s_full.
@@ -188,10 +197,7 @@ def make_s_full(
 
     Svox = ll / L_scalar
 
-    # Perturbation convolution
-    kernel_shape = tuple(int(round(p / dr)) for p in pert)
-    H = np.ones(kernel_shape, dtype=np.float64)
-    S = fftconvolve(Svox, H, mode="same")
+    S = apply_pert_kernel(Svox, pert, dr)
 
     return SensitivityResult(
         S=S, Svox=Svox, params=params, type_str=type_str,
