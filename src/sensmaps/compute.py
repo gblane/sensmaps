@@ -178,6 +178,11 @@ def make_s_full(
     # nan_to_num below; the resulting RuntimeWarnings are not informative.
     with np.errstate(divide="ignore", invalid="ignore"):
         l_vec = continuous_part_path_len(rs_used, r_all, rd, dr ** 3, opt_prop)
+    
+    # Values with z < 0 should not be calculated (set to 0)
+    z_coords = r_all[:, 2]
+    l_vec[z_coords < 0] = 0.0
+
     l_vec = np.nan_to_num(l_vec, nan=0.0)
     ll = l_vec.reshape(XX.shape)
 

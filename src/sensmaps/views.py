@@ -87,7 +87,7 @@ def make_color_limits(x, quantiles=(0.05, 0.95)):
 from matplotlib.colors import ListedColormap
 
 
-def render_slice(ax, S_plane, plot_params, clim, cmap, contour_alpha=0.5):
+def render_slice(ax, S_plane, plot_params, clim, cmap, rs=None, rd=None, pert=(1.0, 1.0, 1.0), contour_alpha=0.5):
     """Draw a 2D slice with dashed contour overlay on a matplotlib Axes.
 
     Port of the imagesc + contour pattern from MATLAB example1_DT.m.
@@ -99,11 +99,14 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, contour_alpha=0.5):
     plot_params  : PlotParams from slice_s
     clim         : (vmin, vmax)
     cmap         : (N, 4) RGBA array OR a matplotlib Colormap
+    rs           : (N_s, 3) source coordinates [mm] (optional)
+    rd           : (N_d, 3) detector coordinates [mm] (optional)
+    pert         : (px, py, pz) perturbation box size [mm]
     contour_alpha: float in [0, 1] for the overlay gray level
 
     Returns
     -------
-    dict with keys "image", "contour", "colorbar" — the matplotlib artists.
+    dict with keys "image", "contour", "colorbar", "sources", "detectors" — the artists.
     """
     ax.clear()
 
@@ -127,18 +130,61 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, contour_alpha=0.5):
     )
     fig = ax.figure
     colorbar = fig.colorbar(image, ax=ax)
-    colorbar.set_label(r"$\mathcal{S}$")
+    
+    # Dynamic colorbar label
+    p_str = f"{pert[0]:g} x {pert[1]:g} x {pert[2]:g}"
+    colorbar.set_label(f"S to a ( {p_str} ) $mm^3$ absorption perturbation")
+
+    # Title with LaTeX and new line
+    ax.set_title(r"$\mathcal{S} = \partial \mu_{a,meas} / \partial \mu_{a,pert}$" "\n"
+                 r"fractional measurement sensitivity to absorption perturbations",
+                 fontsize=10)
 
     # Contour overlay at colorbar tick values. Skip when either axis is
     # degenerate — matplotlib.contour requires a (>=2, >=2) array.
     contour = None
     if S_plane.shape[0] >= 2 and S_plane.shape[1] >= 2:
         levels = colorbar.get_ticks()
-        contour = ax.contour(
-            plot_params.horz_axis, plot_params.vert_axis, S_plane,
-            levels=levels, linestyles="--",
-            colors=[(contour_alpha, contour_alpha, contour_alpha)],
-            linewidths=0.8,
+        # Filter levels to be within clim to avoid warnings
+        levels = [v for v in levels if clim[0] <= v <= clim[1]]
+        if levels:
+            contour = ax.contour(
+                plot_params.horz_axis, plot_params.vert_axis, S_plane,
+                levels=levels, linestyles="--",
+                colors=[(contour_alpha, contour_alpha, contour_alpha)],
+                linewidths=0.8,
+            )
+
+    # Plot optodes if provided
+    # Identify labels to find coordinates
+    h_lab = plot_params.horz_label.lower()
+    v_lab = plot_params.vert_label.lower()
+    
+    def get_indices(lab):
+        if 'x' in lab: return 0
+        if 'y' in lab: return 1
+        if 'z' in lab: return 2
+        return None
+
+    h_idx = get_indices(h_lab)
+    v_idx = get_indices(v_lab)
+    
+    sources_artist = None
+    if rs is not None:
+        rs = np.atleast_2d(rs)
+        sources_artist = ax.scatter(
+            rs[:, h_idx], rs[:, v_idx],
+            marker='v', color='red', s=50, label='Sources', edgecolors='white',
+            zorder=10
+        )
+
+    detectors_artist = None
+    if rd is not None:
+        rd = np.atleast_2d(rd)
+        detectors_artist = ax.scatter(
+            rd[:, h_idx], rd[:, v_idx],
+            marker='^', color='blue', s=50, label='Detectors', edgecolors='white',
+            zorder=10
         )
 
     ax.set_xlabel(plot_params.horz_label)
@@ -148,4 +194,7 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, contour_alpha=0.5):
         ax.invert_yaxis()
     ax.set_aspect("equal", adjustable="box")
 
-    return {"image": image, "contour": contour, "colorbar": colorbar}
+    return {
+        "image": image, "contour": contour, "colorbar": colorbar,
+        "sources": sources_artist, "detectors": detectors_artist
+    }

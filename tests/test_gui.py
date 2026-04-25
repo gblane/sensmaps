@@ -71,6 +71,32 @@ def test_parameter_panel_reads_and_writes_values(tk_root):
     assert got["rs"] == [1.0, 2.0, 3.0]
 
 
+def test_parameter_panel_pert_syncing(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+
+    # By default pert_override is False, so pert should sync with dr
+    panel.set_values({"dr": 0.5, "pert_override": False})
+    vals = panel.get_values()
+    assert vals["pert"] == [0.5, 0.5, 0.5]
+
+    # Change dr, pert should follow
+    panel.set_values({"dr": 0.2})
+    assert panel.get_values()["pert"] == [0.2, 0.2, 0.2]
+
+    # Enable override
+    panel.set_values({"pert_override": True, "pert": [1.0, 1.0, 1.0]})
+    assert panel.get_values()["pert"] == [1.0, 1.0, 1.0]
+
+    # Change dr, pert should NOT follow
+    panel.set_values({"dr": 0.3})
+    assert panel.get_values()["pert"] == [1.0, 1.0, 1.0]
+
+    # Disable override, pert should snap back to dr
+    panel.set_values({"pert_override": False})
+    assert panel.get_values()["pert"] == [0.3, 0.3, 0.3]
+
+
 def test_parameter_panel_classifies_cheap_vs_expensive(tk_root):
     from sensmaps.gui import ParameterPanel, PARAM_CLASS
     panel = ParameterPanel(master=tk_root)

@@ -30,14 +30,15 @@ class PlotCanvas:
         return self._frame
 
     def show(self, *, S, params, axis: str, value: float,
-             quantiles: tuple[float, float] = (0.05, 0.95)) -> None:
+             quantiles: tuple[float, float] = (0.05, 0.95),
+             rs=None, rd=None, pert=(1.0, 1.0, 1.0)) -> None:
         """Render a slice of S at (axis, value) with given color quantiles."""
         plane, pp = slice_s(S, params, axis=axis, value=value)
         clim, cmap = make_color_limits(S, quantiles=quantiles)
         # Remove any old colorbar to avoid stacking
         self._figure.clf()
         self._ax = self._figure.add_subplot(111)
-        render_slice(self._ax, plane, pp, clim, cmap)
+        render_slice(self._ax, plane, pp, clim, cmap, rs=rs, rd=rd, pert=pert)
         self._canvas.draw()
 
     def clear(self) -> None:
@@ -78,6 +79,7 @@ _DEFAULTS: dict[str, Any] = {
     "zl": [0.0, 25.0],
     "dr": 1.0,
     "pert": [1.0, 1.0, 1.0],
+    "pert_override": False,
     "slice_axis": "y",
     "slice_value": 0.0,
     "quantiles": [0.05, 0.95],
@@ -102,6 +104,7 @@ class ParameterPanel:
     def __init__(self, master: tk.Misc):
         self._frame = ttk.Frame(master)
         self._subscribers: list[Callable[[str, Any], None]] = []
+        self._inputs: list[tk.Widget] = []
 
         # Backing variables
         self._vars: dict[str, tk.Variable] = {}
@@ -115,6 +118,11 @@ class ParameterPanel:
     def subscribe(self, callback: Callable[[str, Any], None]) -> None:
         self._subscribers.append(callback)
 
+    def bind_return(self, callback: Callable[[tk.Event], Any]) -> None:
+        """Bind the Return key to all input widgets."""
+        for widget in self._inputs:
+            widget.bind("<Return>", callback)
+
     def _notify(self, name: str, value: Any) -> None:
         for cb in self._subscribers:
             cb(name, value)
@@ -126,65 +134,92 @@ class ParameterPanel:
         # Type
         ttk.Label(f, text="Type").grid(row=row, column=0, sticky="w")
         self._vars["type_str"] = tk.StringVar(value="CW_SD_I")
-        ttk.Combobox(f, textvariable=self._vars["type_str"],
-                     values=["CW_SD_I"], state="readonly", width=12
-                     ).grid(row=row, column=1, sticky="ew"); row += 1
+        cb_type = ttk.Combobox(f, textvariable=self._vars["type_str"],
+                               values=["CW_SD_I"], state="readonly", width=12)
+        cb_type.grid(row=row, column=1, sticky="ew")
+        self._inputs.append(cb_type)
+        row += 1
 
         # Optodes
-        ttk.Label(f, text="rs [x y z]").grid(row=row, column=0, sticky="w")
+        ttk.Label(f, text="rs [x y z] (mm)").grid(row=row, column=0, sticky="w")
         self._vars["rs"] = tk.StringVar()
-        ttk.Entry(f, textvariable=self._vars["rs"], width=20
-                  ).grid(row=row, column=1, sticky="ew"); row += 1
+        en_rs = ttk.Entry(f, textvariable=self._vars["rs"], width=20)
+        en_rs.grid(row=row, column=1, sticky="ew")
+        self._inputs.append(en_rs)
+        row += 1
 
-        ttk.Label(f, text="rd [x y z]").grid(row=row, column=0, sticky="w")
+        ttk.Label(f, text="rd [x y z] (mm)").grid(row=row, column=0, sticky="w")
         self._vars["rd"] = tk.StringVar()
-        ttk.Entry(f, textvariable=self._vars["rd"], width=20
-                  ).grid(row=row, column=1, sticky="ew"); row += 1
+        en_rd = ttk.Entry(f, textvariable=self._vars["rd"], width=20)
+        en_rd.grid(row=row, column=1, sticky="ew")
+        self._inputs.append(en_rd)
+        row += 1
 
         # Optical properties
-        ttk.Label(f, text="Optical: n_in n_out musp mua").grid(
+        ttk.Label(f, text="Optical properties").grid(
             row=row, column=0, columnspan=2, sticky="w"); row += 1
-        for key in ("n_in", "n_out", "musp", "mua"):
-            ttk.Label(f, text=f"  {key}").grid(row=row, column=0, sticky="w")
+        for key, unit in [("n_in", ""), ("n_out", ""), ("musp", " (1/mm)"), ("mua", " (1/mm)")]:
+            ttk.Label(f, text=f"  {key}{unit}").grid(row=row, column=0, sticky="w")
             self._vars[f"opt_prop.{key}"] = tk.StringVar()
-            ttk.Entry(f, textvariable=self._vars[f"opt_prop.{key}"], width=10
-                      ).grid(row=row, column=1, sticky="w"); row += 1
+            en_op = ttk.Entry(f, textvariable=self._vars[f"opt_prop.{key}"], width=10)
+            en_op.grid(row=row, column=1, sticky="w")
+            self._inputs.append(en_op)
+            row += 1
 
         # Grid limits
         for key in ("xl", "yl", "zl"):
-            ttk.Label(f, text=f"{key} [min max]").grid(row=row, column=0, sticky="w")
+            ttk.Label(f, text=f"{key} [min max] (mm)").grid(row=row, column=0, sticky="w")
             self._vars[key] = tk.StringVar()
-            ttk.Entry(f, textvariable=self._vars[key], width=20
-                      ).grid(row=row, column=1, sticky="ew"); row += 1
+            en_lim = ttk.Entry(f, textvariable=self._vars[key], width=20)
+            en_lim.grid(row=row, column=1, sticky="ew")
+            self._inputs.append(en_lim)
+            row += 1
 
         ttk.Label(f, text="dr (mm)").grid(row=row, column=0, sticky="w")
         self._vars["dr"] = tk.StringVar()
-        ttk.Entry(f, textvariable=self._vars["dr"], width=8
-                  ).grid(row=row, column=1, sticky="w"); row += 1
+        en_dr = ttk.Entry(f, textvariable=self._vars["dr"], width=8)
+        en_dr.grid(row=row, column=1, sticky="w")
+        self._inputs.append(en_dr)
+        row += 1
 
         # Perturbation
-        ttk.Label(f, text="pert [x y z]").grid(row=row, column=0, sticky="w")
+        ttk.Label(f, text="pert [x y z] (mm)").grid(row=row, column=0, sticky="w")
+        pert_frame = ttk.Frame(f)
+        pert_frame.grid(row=row, column=1, sticky="ew")
+
         self._vars["pert"] = tk.StringVar()
-        ttk.Entry(f, textvariable=self._vars["pert"], width=20
-                  ).grid(row=row, column=1, sticky="ew"); row += 1
+        self._pert_entry = ttk.Entry(pert_frame, textvariable=self._vars["pert"], width=12)
+        self._pert_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._inputs.append(self._pert_entry)
+
+        self._vars["pert_override"] = tk.BooleanVar(value=False)
+        ttk.Checkbutton(pert_frame, text="Override", variable=self._vars["pert_override"]
+                        ).pack(side=tk.LEFT, padx=(4, 0))
+        row += 1
 
         # Slice
         ttk.Label(f, text="slice axis").grid(row=row, column=0, sticky="w")
         self._vars["slice_axis"] = tk.StringVar(value="y")
-        ttk.Combobox(f, textvariable=self._vars["slice_axis"],
-                     values=["x", "y", "z"], state="readonly", width=4
-                     ).grid(row=row, column=1, sticky="w"); row += 1
+        cb_slice = ttk.Combobox(f, textvariable=self._vars["slice_axis"],
+                                values=["x", "y", "z"], state="readonly", width=4)
+        cb_slice.grid(row=row, column=1, sticky="w")
+        self._inputs.append(cb_slice)
+        row += 1
 
-        ttk.Label(f, text="slice value").grid(row=row, column=0, sticky="w")
+        ttk.Label(f, text="slice value (mm)").grid(row=row, column=0, sticky="w")
         self._vars["slice_value"] = tk.StringVar()
-        ttk.Entry(f, textvariable=self._vars["slice_value"], width=10
-                  ).grid(row=row, column=1, sticky="w"); row += 1
+        en_val = ttk.Entry(f, textvariable=self._vars["slice_value"], width=10)
+        en_val.grid(row=row, column=1, sticky="w")
+        self._inputs.append(en_val)
+        row += 1
 
         # Color quantiles
         ttk.Label(f, text="quantiles [lo hi]").grid(row=row, column=0, sticky="w")
         self._vars["quantiles"] = tk.StringVar()
-        ttk.Entry(f, textvariable=self._vars["quantiles"], width=14
-                  ).grid(row=row, column=1, sticky="ew"); row += 1
+        en_q = ttk.Entry(f, textvariable=self._vars["quantiles"], width=14)
+        en_q.grid(row=row, column=1, sticky="ew")
+        self._inputs.append(en_q)
+        row += 1
 
         # Wire change callbacks
         for name, var in self._vars.items():
@@ -195,6 +230,19 @@ class ParameterPanel:
             values = self.get_values()
         except Exception:
             return  # swallow transient parse errors during typing
+
+        # Handle pert syncing if not overridden
+        override = self._vars["pert_override"].get()
+        if not override:
+            self._pert_entry.config(state="disabled")
+            if name == "dr" or name == "pert_override":
+                dr = values["dr"]
+                self._vars["pert"].set(f"{dr:g} {dr:g} {dr:g}")
+                # Refresh values to pick up the newly set pert
+                values = self.get_values()
+        else:
+            self._pert_entry.config(state="normal")
+
         if name.startswith("opt_prop."):
             self._notify("opt_prop", values["opt_prop"])
         else:
@@ -217,6 +265,7 @@ class ParameterPanel:
             "zl": _parse_float_list(v["zl"].get(), 2),
             "dr": float(v["dr"].get()),
             "pert": _parse_float_list(v["pert"].get(), 3),
+            "pert_override": bool(v["pert_override"].get()),
             "slice_axis": v["slice_axis"].get(),
             "slice_value": float(v["slice_value"].get()),
             "quantiles": _parse_float_list(v["quantiles"].get(), 2),
@@ -225,20 +274,35 @@ class ParameterPanel:
     def set_values(self, values: dict[str, Any]) -> None:
         def _fmt_list(xs): return " ".join(f"{x:g}" for x in xs)
 
-        self._vars["type_str"].set(values["type_str"])
-        self._vars["rs"].set(_fmt_list(values["rs"]))
-        self._vars["rd"].set(_fmt_list(values["rd"]))
-        op = values["opt_prop"]
-        for k in ("n_in", "n_out", "musp", "mua"):
-            self._vars[f"opt_prop.{k}"].set(f"{op[k]:g}")
-        self._vars["xl"].set(_fmt_list(values["xl"]))
-        self._vars["yl"].set(_fmt_list(values["yl"]))
-        self._vars["zl"].set(_fmt_list(values["zl"]))
-        self._vars["dr"].set(f"{values['dr']:g}")
-        self._vars["pert"].set(_fmt_list(values["pert"]))
-        self._vars["slice_axis"].set(values["slice_axis"])
-        self._vars["slice_value"].set(f"{values['slice_value']:g}")
-        self._vars["quantiles"].set(_fmt_list(values["quantiles"]))
+        if "type_str" in values:
+            self._vars["type_str"].set(values["type_str"])
+        if "rs" in values:
+            self._vars["rs"].set(_fmt_list(values["rs"]))
+        if "rd" in values:
+            self._vars["rd"].set(_fmt_list(values["rd"]))
+        if "opt_prop" in values:
+            op = values["opt_prop"]
+            for k in ("n_in", "n_out", "musp", "mua"):
+                if k in op:
+                    self._vars[f"opt_prop.{k}"].set(f"{op[k]:g}")
+        if "xl" in values:
+            self._vars["xl"].set(_fmt_list(values["xl"]))
+        if "yl" in values:
+            self._vars["yl"].set(_fmt_list(values["yl"]))
+        if "zl" in values:
+            self._vars["zl"].set(_fmt_list(values["zl"]))
+        if "dr" in values:
+            self._vars["dr"].set(f"{values['dr']:g}")
+        if "pert_override" in values:
+            self._vars["pert_override"].set(values["pert_override"])
+        if "pert" in values:
+            self._vars["pert"].set(_fmt_list(values["pert"]))
+        if "slice_axis" in values:
+            self._vars["slice_axis"].set(values["slice_axis"])
+        if "slice_value" in values:
+            self._vars["slice_value"].set(f"{values['slice_value']:g}")
+        if "quantiles" in values:
+            self._vars["quantiles"].set(_fmt_list(values["quantiles"]))
 
 
 import json
@@ -278,6 +342,7 @@ class MainWindow:
         self.params_panel = ParameterPanel(master=left)
         self.params_panel.widget.pack(padx=8, pady=8, fill=tk.Y)
         self.params_panel.subscribe(self._on_param_changed)
+        self.params_panel.bind_return(lambda _e: self.recalculate())
 
         self.plot_canvas = PlotCanvas(master=right)
         self.plot_canvas.widget.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
@@ -285,21 +350,33 @@ class MainWindow:
         # Action bar
         bar = ttk.Frame(master)
         bar.pack(side=tk.BOTTOM, fill=tk.X)
-        self._dirty_label = ttk.Label(bar, text="● in sync", foreground="green")
+        self._dirty_label = ttk.Label(bar, text="● image updated", foreground="green")
         self._dirty_label.pack(side=tk.LEFT, padx=8)
-        ttk.Button(bar, text="Recalculate", command=self.recalculate
-                   ).pack(side=tk.LEFT, padx=4, pady=4)
-        ttk.Button(bar, text="Revert", command=self.revert
-                   ).pack(side=tk.LEFT, padx=4, pady=4)
+
+        self._recalc_btn = ttk.Button(bar, text="Recalculate", command=self.recalculate)
+        self._recalc_btn.pack(side=tk.LEFT, padx=4, pady=4)
+
+        self._revert_btn = ttk.Button(bar, text="Revert", command=self.revert)
+        self._revert_btn.pack(side=tk.LEFT, padx=4, pady=4)
+
         ttk.Button(bar, text="Save Figure…", command=self.save_figure
                    ).pack(side=tk.LEFT, padx=4, pady=4)
         ttk.Button(bar, text="Save Data…", command=self.save_data
                    ).pack(side=tk.LEFT, padx=4, pady=4)
 
+        # Style for highlighting
+        self.style = ttk.Style()
+        # Some themes don't support foreground on TButton easily, so we'll try to use a distinct style
+        self.style.configure("Highlighted.TButton", font=("TkDefaultFont", 10, "bold"))
+
         # State
         self._cache = None   # SensitivityResult or None
         self._last_inputs: dict | None = None
         self._dirty = False
+
+        # Load session and compute on open
+        self.load_session()
+        self.recalculate()
 
     @property
     def is_dirty(self) -> bool:
@@ -308,10 +385,14 @@ class MainWindow:
     def _set_dirty(self, flag: bool) -> None:
         self._dirty = flag
         if flag:
-            self._dirty_label.config(text="● form changed — click Recalculate",
+            self._dirty_label.config(text="● click recalculate",
                                      foreground="orange")
+            self._recalc_btn.config(style="Highlighted.TButton")
+            self._revert_btn.config(style="Highlighted.TButton")
         else:
-            self._dirty_label.config(text="● in sync", foreground="green")
+            self._dirty_label.config(text="● image updated", foreground="green")
+            self._recalc_btn.config(style="TButton")
+            self._revert_btn.config(style="TButton")
 
     def _on_param_changed(self, name: str, value) -> None:
         klass = PARAM_CLASS.get(name, "expensive")
@@ -346,6 +427,9 @@ class MainWindow:
                 axis=values["slice_axis"],
                 value=values["slice_value"],
                 quantiles=tuple(values["quantiles"]),
+                rs=self._cache.rs,
+                rd=self._cache.rd,
+                pert=tuple(values["pert"]),
             )
         except Exception:
             # A bad render shouldn't kill the live-update path; log to stderr.
@@ -381,6 +465,8 @@ class MainWindow:
             S=result.S, params=result.params,
             axis=values["slice_axis"], value=values["slice_value"],
             quantiles=tuple(values["quantiles"]),
+            rs=result.rs, rd=result.rd,
+            pert=result.pert,
         )
 
     def revert(self) -> None:
