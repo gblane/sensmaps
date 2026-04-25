@@ -109,13 +109,19 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, contour_alpha=0.5):
 
     cmap_obj = cmap if hasattr(cmap, "__call__") else ListedColormap(cmap)
 
-    extent = (
-        plot_params.horz_axis[0], plot_params.horz_axis[-1],
-        plot_params.vert_axis[0], plot_params.vert_axis[-1],
-    )
+    # When an axis has only one voxel, fall back to a half-step pad so imshow
+    # has finite extent on that axis.
+    def _padded_extent(vec, fallback=0.5):
+        if vec.size == 1:
+            return float(vec[0]) - fallback, float(vec[0]) + fallback
+        return float(vec[0]), float(vec[-1])
+
+    h0, h1 = _padded_extent(plot_params.horz_axis)
+    v0, v1 = _padded_extent(plot_params.vert_axis)
+    extent = (h0, h1, v0, v1)
     image = ax.imshow(
         S_plane,
-        extent=extent, origin="lower", aspect="equal",
+        extent=extent, origin="lower", aspect="auto",
         vmin=clim[0], vmax=clim[1], cmap=cmap_obj,
         interpolation="nearest",
     )
@@ -123,17 +129,23 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, contour_alpha=0.5):
     colorbar = fig.colorbar(image, ax=ax)
     colorbar.set_label(r"$\mathcal{S}$")
 
-    # Contour overlay at colorbar tick values
-    levels = colorbar.get_ticks()
-    contour = ax.contour(
-        plot_params.horz_axis, plot_params.vert_axis, S_plane,
-        levels=levels, linestyles="--",
-        colors=[(contour_alpha, contour_alpha, contour_alpha)],
-        linewidths=0.8,
-    )
+    # Contour overlay at colorbar tick values. Skip when either axis is
+    # degenerate — matplotlib.contour requires a (>=2, >=2) array.
+    contour = None
+    if S_plane.shape[0] >= 2 and S_plane.shape[1] >= 2:
+        levels = colorbar.get_ticks()
+        contour = ax.contour(
+            plot_params.horz_axis, plot_params.vert_axis, S_plane,
+            levels=levels, linestyles="--",
+            colors=[(contour_alpha, contour_alpha, contour_alpha)],
+            linewidths=0.8,
+        )
 
     ax.set_xlabel(plot_params.horz_label)
     ax.set_ylabel(plot_params.vert_label)
+    # When the vertical axis is depth (z), put z=0 at the top — NIRS convention.
+    if "$z$" in plot_params.vert_label:
+        ax.invert_yaxis()
     ax.set_aspect("equal", adjustable="box")
 
     return {"image": image, "contour": contour, "colorbar": colorbar}

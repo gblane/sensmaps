@@ -328,24 +328,29 @@ class MainWindow:
             values = self.params_panel.get_values()
         except Exception:
             return
-        S = self._cache.S
-        # Pert is cheap: re-conv Svox with new kernel before slicing
-        if name == "pert" and list(values["pert"]) != list(self._cache.pert):
-            from scipy.signal import fftconvolve
-            dr = self._cache.dr
-            kernel_shape = tuple(int(round(p / dr)) for p in values["pert"])
-            H = np.ones(kernel_shape, dtype=np.float64)
-            S = fftconvolve(self._cache.Svox, H, mode="same")
-            # Update cache's S and pert
-            self._cache.S = S
-            self._cache.pert = tuple(values["pert"])
-        self.plot_canvas.show(
-            S=S,
-            params=self._cache.params,
-            axis=values["slice_axis"],
-            value=values["slice_value"],
-            quantiles=tuple(values["quantiles"]),
-        )
+        try:
+            S = self._cache.S
+            # Pert is cheap: re-conv Svox with new kernel before slicing
+            if name == "pert" and list(values["pert"]) != list(self._cache.pert):
+                from scipy.signal import fftconvolve
+                dr = self._cache.dr
+                kernel_shape = tuple(int(round(p / dr)) for p in values["pert"])
+                H = np.ones(kernel_shape, dtype=np.float64)
+                S = fftconvolve(self._cache.Svox, H, mode="same")
+                # Update cache's S and pert
+                self._cache.S = S
+                self._cache.pert = tuple(values["pert"])
+            self.plot_canvas.show(
+                S=S,
+                params=self._cache.params,
+                axis=values["slice_axis"],
+                value=values["slice_value"],
+                quantiles=tuple(values["quantiles"]),
+            )
+        except Exception:
+            # A bad render shouldn't kill the live-update path; log to stderr.
+            import traceback
+            traceback.print_exc()
 
     def recalculate(self) -> None:
         values = self.params_panel.get_values()
