@@ -45,3 +45,42 @@ def test_plot_canvas_constructs_and_shows_slice(tk_root, cw_sd_i_ref):
     canvas.show(S=S, params=params, axis="y", value=0.0, quantiles=(0.05, 0.95))
     # Widget is packable
     assert canvas.widget is not None
+
+
+def test_parameter_panel_reads_and_writes_values(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+
+    # Default values should round-trip through get_values
+    defaults = panel.get_values()
+    assert defaults["type_str"] == "CW_SD_I"
+    assert defaults["slice_axis"] in ("x", "y", "z")
+    assert isinstance(defaults["rs"], list)
+    assert len(defaults["rs"]) == 3
+    assert isinstance(defaults["opt_prop"], dict)
+    assert "musp" in defaults["opt_prop"]
+
+    # Round-trip set_values → get_values
+    new_vals = dict(defaults)
+    new_vals["opt_prop"] = dict(defaults["opt_prop"], musp=1.2, mua=0.02)
+    new_vals["rs"] = [1.0, 2.0, 3.0]
+    panel.set_values(new_vals)
+    got = panel.get_values()
+    assert got["opt_prop"]["musp"] == 1.2
+    assert got["opt_prop"]["mua"] == 0.02
+    assert got["rs"] == [1.0, 2.0, 3.0]
+
+
+def test_parameter_panel_classifies_cheap_vs_expensive(tk_root):
+    from sensmaps.gui import ParameterPanel, PARAM_CLASS
+    panel = ParameterPanel(master=tk_root)
+    # Sample classifications
+    assert PARAM_CLASS["slice_axis"] == "cheap"
+    assert PARAM_CLASS["slice_value"] == "cheap"
+    assert PARAM_CLASS["quantiles"] == "cheap"
+    assert PARAM_CLASS["pert"] == "cheap"
+    assert PARAM_CLASS["rs"] == "expensive"
+    assert PARAM_CLASS["opt_prop"] == "expensive"
+    assert PARAM_CLASS["xl"] == "expensive"
+    assert PARAM_CLASS["dr"] == "expensive"
+    assert PARAM_CLASS["type_str"] == "expensive"
