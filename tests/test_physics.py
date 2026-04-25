@@ -71,3 +71,18 @@ def test_complex_tot_path_len_cw_matches_matlab(cw_sd_i_ref):
     np.testing.assert_allclose(L[0], L_ref, rtol=1e-10, atol=0)
     # At omega=0 the imaginary part is numerically zero
     assert abs(L[0].imag) < 1e-12
+
+
+def test_complex_part_path_len_cw_scalar_matches_matlab(cw_sd_i_ref):
+    from sensmaps.physics import complex_part_path_len
+    ref = cw_sd_i_ref
+    op = _opt_prop_from_ref(ref)
+    rs = np.asarray(ref["rs"], dtype=float).reshape(1, 3)
+    rd = np.asarray(ref["rd"], dtype=float).reshape(1, 3)
+    r_test = np.asarray(ref["r_test"], dtype=float).reshape(1, 3)
+    dr = float(ref["dr"])
+    l_ref = complex(ref["l_test_cw"])
+
+    l = complex_part_path_len(rs, r_test, rd, dr**3, 0.0, op)
+    assert l.shape == (1,)
+    np.testing.assert_allclose(l[0], l_ref, rtol=1e-10, atol=0)
