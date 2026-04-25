@@ -57,3 +57,28 @@ def slice_s(S: np.ndarray, params, axis: str, value: float):
             vert_axis=params.y, vert_label="$y$ (mm)",
         )
     return plane, pp
+
+
+import matplotlib.pyplot as _plt
+
+
+def make_color_limits(x, quantiles=(0.05, 0.95)):
+    """Quantile-based color limits and saturated-ends jet colormap. Port of makeCL.m.
+
+    Parameters
+    ----------
+    x         : array-like — values whose quantiles set the color limits
+    quantiles : (lo, hi) floats in [0, 1]
+
+    Returns
+    -------
+    clim : (vmin, vmax) tuple of floats
+    cmap : ndarray of shape (100, 4) — jet with row 0 black and row 99 white
+    """
+    arr = np.asarray(x).ravel()
+    clim = (float(np.quantile(arr, quantiles[0])), float(np.quantile(arr, quantiles[1])))
+    jet = _plt.get_cmap("jet")
+    cmap = jet(np.linspace(0, 1, 100))
+    cmap[0, :3] = 0.0     # first row black
+    cmap[-1, :3] = 1.0    # last row white
+    return clim, cmap

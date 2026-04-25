@@ -45,3 +45,23 @@ def test_slice_s_snaps_to_nearest_axis_value(tiny_result):
     S_plane_a, _ = slice_s(S, params, axis="y", value=0.0)
     S_plane_b, _ = slice_s(S, params, axis="y", value=0.3)  # snaps to 0
     np.testing.assert_array_equal(S_plane_a, S_plane_b)
+
+
+def test_make_color_limits_defaults():
+    from sensmaps.views import make_color_limits
+    rng = np.random.default_rng(0)
+    x = rng.normal(size=10000)
+    clim, cmap = make_color_limits(x)
+    assert clim == (float(np.quantile(x, 0.05)), float(np.quantile(x, 0.95)))
+    # cmap has 100 rows, first row black, last row white
+    assert cmap.shape == (100, 4)
+    np.testing.assert_array_equal(cmap[0, :3], [0, 0, 0])
+    np.testing.assert_array_equal(cmap[-1, :3], [1, 1, 1])
+
+
+def test_make_color_limits_custom_quantiles():
+    from sensmaps.views import make_color_limits
+    x = np.arange(100).astype(float)
+    clim, _ = make_color_limits(x, quantiles=(0.10, 0.90))
+    np.testing.assert_allclose(clim[0], np.quantile(x, 0.10))
+    np.testing.assert_allclose(clim[1], np.quantile(x, 0.90))

@@ -1,8 +1,27 @@
 """sensmaps — Interactive GUI for diffuse-optical sensitivity maps.
 
-The public API is populated at the end of Task 12 (once the physics, compute,
-and views modules exist). Until then, import from the submodules directly
-(e.g. `from sensmaps.physics import n2a`).
+Public API (stable from v1):
+    make_s             — compute S for a measurement type
+    slice_s            — slice a 3D S array for 2D plotting
+    make_color_limits  — compute saturated colormap and limits
+    OpticalProperties  — dataclass of optical properties
+    GridParams         — dataclass of voxel-grid parameters
+
+More symbols are importable from sensmaps.physics / compute / views / gui
+but are not part of the v1 public-API guarantee.
 """
 
+from sensmaps.compute import GridParams, make_s
+from sensmaps.physics import OpticalProperties
+from sensmaps.views import make_color_limits, slice_s
+
 __version__ = "0.1.0"
+
+__all__ = [
+    "GridParams",
+    "OpticalProperties",
+    "__version__",
+    "make_color_limits",
+    "make_s",
+    "slice_s",
+]
