@@ -82,3 +82,58 @@ def make_color_limits(x, quantiles=(0.05, 0.95)):
     cmap[0, :3] = 0.0     # first row black
     cmap[-1, :3] = 1.0    # last row white
     return clim, cmap
+
+
+from matplotlib.colors import ListedColormap
+
+
+def render_slice(ax, S_plane, plot_params, clim, cmap, contour_alpha=0.5):
+    """Draw a 2D slice with dashed contour overlay on a matplotlib Axes.
+
+    Port of the imagesc + contour pattern from MATLAB example1_DT.m.
+
+    Parameters
+    ----------
+    ax           : matplotlib.axes.Axes
+    S_plane      : 2D ndarray (vert × horz) from slice_s
+    plot_params  : PlotParams from slice_s
+    clim         : (vmin, vmax)
+    cmap         : (N, 4) RGBA array OR a matplotlib Colormap
+    contour_alpha: float in [0, 1] for the overlay gray level
+
+    Returns
+    -------
+    dict with keys "image", "contour", "colorbar" — the matplotlib artists.
+    """
+    ax.clear()
+
+    cmap_obj = cmap if hasattr(cmap, "__call__") else ListedColormap(cmap)
+
+    extent = (
+        plot_params.horz_axis[0], plot_params.horz_axis[-1],
+        plot_params.vert_axis[0], plot_params.vert_axis[-1],
+    )
+    image = ax.imshow(
+        S_plane,
+        extent=extent, origin="lower", aspect="equal",
+        vmin=clim[0], vmax=clim[1], cmap=cmap_obj,
+        interpolation="nearest",
+    )
+    fig = ax.figure
+    colorbar = fig.colorbar(image, ax=ax)
+    colorbar.set_label(r"$\mathcal{S}$")
+
+    # Contour overlay at colorbar tick values
+    levels = colorbar.get_ticks()
+    contour = ax.contour(
+        plot_params.horz_axis, plot_params.vert_axis, S_plane,
+        levels=levels, linestyles="--",
+        colors=[(contour_alpha, contour_alpha, contour_alpha)],
+        linewidths=0.8,
+    )
+
+    ax.set_xlabel(plot_params.horz_label)
+    ax.set_ylabel(plot_params.vert_label)
+    ax.set_aspect("equal", adjustable="box")
+
+    return {"image": image, "contour": contour, "colorbar": colorbar}

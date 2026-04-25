@@ -65,3 +65,24 @@ def test_make_color_limits_custom_quantiles():
     clim, _ = make_color_limits(x, quantiles=(0.10, 0.90))
     np.testing.assert_allclose(clim[0], np.quantile(x, 0.10))
     np.testing.assert_allclose(clim[1], np.quantile(x, 0.90))
+
+
+def test_render_slice_draws_image_contour_labels(tiny_result):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from sensmaps.views import make_color_limits, render_slice, slice_s
+    S, params = tiny_result
+    S_plane, pp = slice_s(S, params, axis="y", value=0.0)
+    clim, cmap = make_color_limits(S)
+
+    fig, ax = plt.subplots()
+    render_slice(ax, S_plane, pp, clim, cmap)
+
+    # Expected artists: AxesImage + contour collections + axis labels
+    from matplotlib.image import AxesImage
+    has_image = any(isinstance(a, AxesImage) for a in ax.get_images())
+    assert has_image
+    assert ax.get_xlabel() == pp.horz_label
+    assert ax.get_ylabel() == pp.vert_label
+    plt.close(fig)
