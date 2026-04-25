@@ -168,3 +168,24 @@ def complex_part_path_len(rs, r, rd, V: float, omega: float,
     R_rs_rd = complex_reflectance(rs, rd, omega, opt_prop)   # (1,)
 
     return (phi_rs_r * R_r_rd * V) / R_rs_rd
+
+
+def continuous_fluence(rs, r, opt_prop: OpticalProperties):
+    """CW fluence — wrapper for complex_fluence at omega=0. Returns real ndarray."""
+    return complex_fluence(rs, r, 0.0, opt_prop).real
+
+
+def continuous_reflectance(rs, rd, opt_prop: OpticalProperties):
+    """CW reflectance — wrapper for complex_reflectance at omega=0. Returns real ndarray."""
+    return complex_reflectance(rs, rd, 0.0, opt_prop).real
+
+
+def continuous_tot_path_len(rs, rd, opt_prop: OpticalProperties):
+    """CW total path length and reflectance — wrapper at omega=0. Returns real arrays."""
+    L, R = complex_tot_path_len(rs, rd, 0.0, opt_prop)
+    return L.real, R.real
+
+
+def continuous_part_path_len(rs, r, rd, V: float, opt_prop: OpticalProperties):
+    """CW partial path length — wrapper for complex_part_path_len at omega=0."""
+    return complex_part_path_len(rs, r, rd, V, 0.0, opt_prop).real

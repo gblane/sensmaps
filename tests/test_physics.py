@@ -86,3 +86,35 @@ def test_complex_part_path_len_cw_scalar_matches_matlab(cw_sd_i_ref):
     l = complex_part_path_len(rs, r_test, rd, dr**3, 0.0, op)
     assert l.shape == (1,)
     np.testing.assert_allclose(l[0], l_ref, rtol=1e-10, atol=0)
+
+
+def test_continuous_wrappers_return_real_and_match_cw(cw_sd_i_ref):
+    from sensmaps.physics import (
+        continuous_fluence,
+        continuous_part_path_len,
+        continuous_reflectance,
+        continuous_tot_path_len,
+    )
+    ref = cw_sd_i_ref
+    op = _opt_prop_from_ref(ref)
+    rs = np.asarray(ref["rs"], dtype=float).reshape(1, 3)
+    rd = np.asarray(ref["rd"], dtype=float).reshape(1, 3)
+    r_test = np.asarray(ref["r_test"], dtype=float).reshape(1, 3)
+    dr = float(ref["dr"])
+
+    phi = continuous_fluence(rs, r_test, op)
+    R = continuous_reflectance(rs, rd, op)
+    L, R2 = continuous_tot_path_len(rs, rd, op)
+    l = continuous_part_path_len(rs, r_test, rd, dr**3, op)
+
+    # Real dtype
+    assert np.isrealobj(phi)
+    assert np.isrealobj(R)
+    assert np.isrealobj(L)
+    assert np.isrealobj(l)
+
+    # Values match the MATLAB CW reference
+    np.testing.assert_allclose(phi[0], float(complex(ref["phi_test_cw"]).real), rtol=1e-10)
+    np.testing.assert_allclose(R[0], float(complex(ref["R_test_cw"]).real), rtol=1e-10)
+    np.testing.assert_allclose(L[0], float(complex(ref["L_test_cw"]).real), rtol=1e-10)
+    np.testing.assert_allclose(l[0], float(complex(ref["l_test_cw"]).real), rtol=1e-10)
