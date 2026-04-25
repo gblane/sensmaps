@@ -2,7 +2,20 @@
   "permissions": {
     "allow": [
       "Bash(git add *)",
-      "Bash(git commit -m 'feat: project scaffolding \\(pyproject, package layout, entry stub\\) *)"
+      "Bash(git commit -m 'feat: project scaffolding \\(pyproject, package layout, entry stub\\) *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit -m 'feat\\(physics\\): complex_part_path_len and N-source broadcasting *)",
+      "Bash(git commit -m 'feat\\(physics\\): continuous_* CW wrappers \\(omega=0, real-valued\\) *)",
+      "Bash(git commit -m 'feat\\(compute\\): GridParams dataclass and type-string parser *)",
+      "Bash(git commit -m 'feat\\(compute\\): make_s CW_SD_I with DT + end-to-end fixture test *)",
+      "Bash(git commit -m 'feat\\(views\\): slice_s port with 2D slice orientation *)",
+      "Bash(git commit -m 'feat\\(views\\): make_color_limits and populate public API in __init__ *)",
+      "Bash(git commit -m 'feat\\(views\\): render_slice with imshow + dashed contour overlay *)",
+      "Bash(git commit -m 'feat\\(gui\\): PlotCanvas embedding matplotlib in Tk frame *)",
+      "Bash(git commit -m 'feat\\(gui\\): ParameterPanel with default values and subscribe hook *)",
+      "Bash(git commit -m 'feat: __main__ with --smoke-test flag and session persistence on close *)",
+      "Bash(git commit -m 'docs: add README with install, usage, and paper citation *)",
+      "Bash(git push *)"
     ]
   }
 }
