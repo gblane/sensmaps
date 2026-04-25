@@ -160,3 +160,12 @@ def test_revert_restores_to_last_computed(tk_root, tmp_path, monkeypatch, cw_sd_
     got = mw.params_panel.get_values()
     assert got["rs"] == [0.0, 0.0, 0.0]
     assert not mw.is_dirty
+
+
+def test_main_smoke_constructs_and_exits(tmp_path, monkeypatch):
+    """Ensure main() can construct a MainWindow and shut down cleanly."""
+    _require_display()
+    monkeypatch.chdir(tmp_path)
+    from sensmaps.__main__ import main
+    exit_code = main(argv=["--smoke-test"])
+    assert exit_code == 0
