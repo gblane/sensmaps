@@ -239,3 +239,193 @@ class ParameterPanel:
         self._vars["slice_axis"].set(values["slice_axis"])
         self._vars["slice_value"].set(f"{values['slice_value']:g}")
         self._vars["quantiles"].set(_fmt_list(values["quantiles"]))
+
+
+import json
+from pathlib import Path
+from tkinter import filedialog, messagebox
+
+import numpy as np
+
+from sensmaps.compute import make_s_full
+from sensmaps.physics import OpticalProperties
+
+
+SESSION_FILE = Path("last_session.json")
+
+
+def _opt_prop_from_dict(d: dict) -> OpticalProperties:
+    return OpticalProperties(
+        n_in=d["n_in"], n_out=d["n_out"], musp=d["musp"], mua=d["mua"],
+    )
+
+
+class MainWindow:
+    """Top-level Tk window wiring ParameterPanel, PlotCanvas, and actions."""
+
+    def __init__(self, master: tk.Misc):
+        self._root = master
+        # Container frame (so test can pass in a withdrawn root)
+        self._container = ttk.Frame(master)
+        self._container.pack(fill=tk.BOTH, expand=True)
+
+        # Two-pane split: params on left, plot on right
+        left = ttk.Frame(self._container)
+        left.pack(side=tk.LEFT, fill=tk.Y)
+        right = ttk.Frame(self._container)
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        self.params_panel = ParameterPanel(master=left)
+        self.params_panel.widget.pack(padx=8, pady=8, fill=tk.Y)
+        self.params_panel.subscribe(self._on_param_changed)
+
+        self.plot_canvas = PlotCanvas(master=right)
+        self.plot_canvas.widget.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        # Action bar
+        bar = ttk.Frame(master)
+        bar.pack(side=tk.BOTTOM, fill=tk.X)
+        self._dirty_label = ttk.Label(bar, text="● in sync", foreground="green")
+        self._dirty_label.pack(side=tk.LEFT, padx=8)
+        ttk.Button(bar, text="Recalculate", command=self.recalculate
+                   ).pack(side=tk.LEFT, padx=4, pady=4)
+        ttk.Button(bar, text="Revert", command=self.revert
+                   ).pack(side=tk.LEFT, padx=4, pady=4)
+        ttk.Button(bar, text="Save Figure…", command=self.save_figure
+                   ).pack(side=tk.LEFT, padx=4, pady=4)
+        ttk.Button(bar, text="Save Data…", command=self.save_data
+                   ).pack(side=tk.LEFT, padx=4, pady=4)
+
+        # State
+        self._cache = None   # SensitivityResult or None
+        self._last_inputs: dict | None = None
+        self._dirty = False
+
+    @property
+    def is_dirty(self) -> bool:
+        return self._dirty
+
+    def _set_dirty(self, flag: bool) -> None:
+        self._dirty = flag
+        if flag:
+            self._dirty_label.config(text="● form changed — click Recalculate",
+                                     foreground="orange")
+        else:
+            self._dirty_label.config(text="● in sync", foreground="green")
+
+    def _on_param_changed(self, name: str, value) -> None:
+        klass = PARAM_CLASS.get(name, "expensive")
+        if klass == "expensive":
+            if self._cache is not None:
+                self._set_dirty(True)
+        else:
+            if self._cache is not None:
+                self._apply_cheap_change(name)
+
+    def _apply_cheap_change(self, name: str) -> None:
+        """Re-slice and redraw without recomputing the physics."""
+        try:
+            values = self.params_panel.get_values()
+        except Exception:
+            return
+        S = self._cache.S
+        # Pert is cheap: re-conv Svox with new kernel before slicing
+        if name == "pert" and list(values["pert"]) != list(self._cache.pert):
+            from scipy.signal import fftconvolve
+            dr = self._cache.dr
+            kernel_shape = tuple(int(round(p / dr)) for p in values["pert"])
+            H = np.ones(kernel_shape, dtype=np.float64)
+            S = fftconvolve(self._cache.Svox, H, mode="same")
+            # Update cache's S and pert
+            self._cache.S = S
+            self._cache.pert = tuple(values["pert"])
+        self.plot_canvas.show(
+            S=S,
+            params=self._cache.params,
+            axis=values["slice_axis"],
+            value=values["slice_value"],
+            quantiles=tuple(values["quantiles"]),
+        )
+
+    def recalculate(self) -> None:
+        values = self.params_panel.get_values()
+        op = _opt_prop_from_dict(values["opt_prop"])
+        result = make_s_full(
+            type_str=values["type_str"],
+            rs=np.array([values["rs"]]),
+            rd=np.array([values["rd"]]),
+            opt_prop=op,
+            xl=tuple(values["xl"]),
+            yl=tuple(values["yl"]),
+            zl=tuple(values["zl"]),
+            dr=values["dr"],
+            pert=tuple(values["pert"]),
+        )
+        self._cache = result
+        self._last_inputs = values
+        self._set_dirty(False)
+        self.plot_canvas.show(
+            S=result.S, params=result.params,
+            axis=values["slice_axis"], value=values["slice_value"],
+            quantiles=tuple(values["quantiles"]),
+        )
+
+    def revert(self) -> None:
+        if self._last_inputs is None:
+            return
+        self.params_panel.set_values(self._last_inputs)
+        self._set_dirty(False)
+
+    def save_figure(self) -> None:
+        path = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG", "*.png"), ("PDF", "*.pdf"), ("SVG", "*.svg")],
+        )
+        if not path:
+            return
+        try:
+            self.plot_canvas._figure.savefig(path)
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e))
+
+    def save_data(self) -> None:
+        if self._cache is None:
+            messagebox.showinfo("No data", "Run Recalculate first.")
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".npz",
+            filetypes=[("NumPy archive", "*.npz")],
+        )
+        if not path:
+            return
+        c = self._cache
+        from sensmaps import __version__ as version
+        try:
+            np.savez(
+                path,
+                S=c.S, Svox=c.Svox,
+                x=c.params.x, y=c.params.y, z=c.params.z,
+                rs=c.rs, rd=c.rd, pert=np.asarray(c.pert), dr=c.dr,
+                type_str=c.type_str,
+                n_in=c.opt_prop.n_in, n_out=c.opt_prop.n_out,
+                musp=c.opt_prop.musp, mua=c.opt_prop.mua,
+                sensmaps_version=version,
+            )
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e))
+
+    def save_session(self) -> None:
+        try:
+            values = self.params_panel.get_values()
+        except Exception:
+            return
+        SESSION_FILE.write_text(json.dumps(values, indent=2))
+
+    def load_session(self) -> None:
+        if not SESSION_FILE.exists():
+            return
+        try:
+            values = json.loads(SESSION_FILE.read_text())
+        except Exception:
+            return
+        self.params_panel.set_values(values)

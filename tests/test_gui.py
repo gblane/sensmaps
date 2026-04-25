@@ -84,3 +84,79 @@ def test_parameter_panel_classifies_cheap_vs_expensive(tk_root):
     assert PARAM_CLASS["xl"] == "expensive"
     assert PARAM_CLASS["dr"] == "expensive"
     assert PARAM_CLASS["type_str"] == "expensive"
+
+
+def test_main_window_constructs_and_recalculates(tk_root, tmp_path, monkeypatch, cw_sd_i_ref):
+    """Constructs MainWindow, triggers a recalc, verifies S was computed and cached."""
+    monkeypatch.chdir(tmp_path)  # so last_session.json writes into tmp_path
+    from sensmaps.gui import MainWindow
+    ref = cw_sd_i_ref
+    mw = MainWindow(master=tk_root)
+    # Set the form to values that match the fixture
+    values = {
+        "type_str": "CW_SD_I",
+        "rs": [0.0, 0.0, 0.0],
+        "rd": [float(ref["rho"]), 0.0, 0.0],
+        "opt_prop": {
+            "n_in":  float(ref["nin"]),
+            "n_out": float(ref["nout"]),
+            "musp":  float(ref["musp"]),
+            "mua":   float(ref["mua"]),
+        },
+        "xl": [float(ref["xl"][0]), float(ref["xl"][1])],
+        "yl": [float(ref["yl"][0]), float(ref["yl"][1])],
+        "zl": [float(ref["zl"][0]), float(ref["zl"][1])],
+        "dr": float(ref["dr"]),
+        "pert": [float(p) for p in ref["pert"]],
+        "slice_axis": "y",
+        "slice_value": 0.0,
+        "quantiles": [0.05, 0.95],
+    }
+    mw.params_panel.set_values(values)
+    mw.recalculate()
+    assert mw._cache is not None
+    S_ref = np.asarray(ref["S"], dtype=float)
+    np.testing.assert_allclose(mw._cache.S, S_ref, rtol=1e-8, atol=1e-12)
+
+
+def test_session_persistence_round_trip(tk_root, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from sensmaps.gui import MainWindow
+    mw1 = MainWindow(master=tk_root)
+    vals = mw1.params_panel.get_values()
+    vals["opt_prop"]["musp"] = 1.7
+    vals["rs"] = [1.0, 2.0, 3.0]
+    mw1.params_panel.set_values(vals)
+    mw1.save_session()
+
+    mw2 = MainWindow(master=tk_root)
+    mw2.load_session()
+    got = mw2.params_panel.get_values()
+    assert got["opt_prop"]["musp"] == 1.7
+    assert got["rs"] == [1.0, 2.0, 3.0]
+
+
+def test_revert_restores_to_last_computed(tk_root, tmp_path, monkeypatch, cw_sd_i_ref):
+    monkeypatch.chdir(tmp_path)
+    from sensmaps.gui import MainWindow
+    ref = cw_sd_i_ref
+    mw = MainWindow(master=tk_root)
+    values = {
+        "type_str": "CW_SD_I",
+        "rs": [0.0, 0.0, 0.0],
+        "rd": [float(ref["rho"]), 0.0, 0.0],
+        "opt_prop": {"n_in": 1.333, "n_out": 1.0, "musp": 1.1, "mua": 0.011},
+        "xl": [-5.0, 40.0], "yl": [0.0, 0.0], "zl": [0.0, 20.0],
+        "dr": 1.0, "pert": [1.0, 1.0, 1.0],
+        "slice_axis": "y", "slice_value": 0.0, "quantiles": [0.05, 0.95],
+    }
+    mw.params_panel.set_values(values)
+    mw.recalculate()
+    # Mutate an expensive field
+    dirty = dict(values); dirty["rs"] = [5.0, 5.0, 5.0]
+    mw.params_panel.set_values(dirty)
+    assert mw.is_dirty
+    mw.revert()
+    got = mw.params_panel.get_values()
+    assert got["rs"] == [0.0, 0.0, 0.0]
+    assert not mw.is_dirty
