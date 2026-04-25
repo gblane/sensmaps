@@ -353,19 +353,27 @@ class MainWindow:
             traceback.print_exc()
 
     def recalculate(self) -> None:
-        values = self.params_panel.get_values()
-        op = _opt_prop_from_dict(values["opt_prop"])
-        result = make_s_full(
-            type_str=values["type_str"],
-            rs=np.array([values["rs"]]),
-            rd=np.array([values["rd"]]),
-            opt_prop=op,
-            xl=tuple(values["xl"]),
-            yl=tuple(values["yl"]),
-            zl=tuple(values["zl"]),
-            dr=values["dr"],
-            pert=tuple(values["pert"]),
-        )
+        try:
+            values = self.params_panel.get_values()
+        except Exception as e:
+            messagebox.showerror("Invalid input", f"Could not parse form: {e}")
+            return
+        try:
+            op = _opt_prop_from_dict(values["opt_prop"])
+            result = make_s_full(
+                type_str=values["type_str"],
+                rs=np.array([values["rs"]]),
+                rd=np.array([values["rd"]]),
+                opt_prop=op,
+                xl=tuple(values["xl"]),
+                yl=tuple(values["yl"]),
+                zl=tuple(values["zl"]),
+                dr=values["dr"],
+                pert=tuple(values["pert"]),
+            )
+        except (ValueError, NotImplementedError) as e:
+            messagebox.showerror("Recalculate failed", str(e))
+            return
         self._cache = result
         self._last_inputs = values
         self._set_dirty(False)
@@ -382,12 +390,20 @@ class MainWindow:
         self._set_dirty(False)
 
     def save_figure(self) -> None:
+        # Don't pass defaultextension — Tk on Linux always appends it regardless
+        # of the filter the user picked. Honor the extension the user typed; if
+        # there isn't one, fall back to .png.
         path = filedialog.asksaveasfilename(
-            defaultextension=".png",
-            filetypes=[("PNG", "*.png"), ("PDF", "*.pdf"), ("SVG", "*.svg")],
+            filetypes=[
+                ("PNG", "*.png"), ("PDF", "*.pdf"), ("SVG", "*.svg"),
+                ("All files", "*.*"),
+            ],
         )
         if not path:
             return
+        from pathlib import Path as _Path
+        if not _Path(path).suffix:
+            path = path + ".png"
         try:
             self.plot_canvas._figure.savefig(path)
         except Exception as e:
