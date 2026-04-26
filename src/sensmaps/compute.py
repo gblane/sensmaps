@@ -129,7 +129,10 @@ def _expand_optodes(arrangement: str, rs, rd, z_offset: float):
 
 
 def _combine_sd(L, Y, ll):
-    """SD combinator: Svox = ll[0] / L[0]. Port of makeS.m line 400."""
+    """SD combinator: Svox = ll[0] / L[0]. Port of makeS.m line 400.
+
+    Y cancels for SD (single measurement), so it is not used.
+    """
     return ll[0] / L[0]
 
 

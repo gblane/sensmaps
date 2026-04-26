@@ -175,3 +175,18 @@ def test_combine_ss_uses_y_weight():
     g1 = np.full((2, 2), 1.0)
     out = _combine_ss(L, Y, [g0, g1])
     np.testing.assert_allclose(out, (3.0 * 1.0 - 2.0 * 1.0) / (3.0 - 2.0) * np.ones((2, 2)))
+
+
+def test_combine_ds_uses_y_weight():
+    """DS analogue of the SS Y-weight test: confirms Y is applied across all 4 measurements."""
+    from sensmaps.compute import _combine_ds
+    L = [1.0, 1.0, 1.0, 1.0]
+    Y = [2.0, 3.0, 5.0, 7.0]
+    g0 = np.full((2, 2), 1.0)
+    g1 = np.full((2, 2), 1.0)
+    g2 = np.full((2, 2), 1.0)
+    g3 = np.full((2, 2), 1.0)
+    out = _combine_ds(L, Y, [g0, g1, g2, g3])
+    expected_num = (3.0 * 1.0 - 2.0 * 1.0) + (7.0 * 1.0 - 5.0 * 1.0)  # 1 + 2 = 3
+    expected_den = (3.0 * 1.0 - 2.0 * 1.0) + (7.0 * 1.0 - 5.0 * 1.0)  # 1 + 2 = 3
+    np.testing.assert_allclose(out, np.full((2, 2), expected_num / expected_den))
