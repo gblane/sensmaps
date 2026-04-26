@@ -133,3 +133,45 @@ def test_make_s_rejects_unsupported_type():
             opt_prop=OpticalProperties(),
             xl=(-5, 40), yl=(0, 0), zl=(0, 20), dr=1.0,
         )
+
+
+def test_combine_sd_basic():
+    from sensmaps.compute import _combine_sd
+    L = [10.0]
+    Y = [1.0]
+    ll = [np.array([[1.0, 2.0], [3.0, 4.0]])]
+    out = _combine_sd(L, Y, ll)
+    np.testing.assert_allclose(out, np.array([[0.1, 0.2], [0.3, 0.4]]))
+
+
+def test_combine_ss_two_meas():
+    from sensmaps.compute import _combine_ss
+    L = [10.0, 20.0]
+    Y = [1.0, 1.0]
+    g0 = np.array([[1.0, 2.0], [3.0, 4.0]])
+    g1 = np.array([[5.0, 6.0], [7.0, 8.0]])
+    out = _combine_ss(L, Y, [g0, g1])
+    expected = (g1 - g0) / (20.0 - 10.0)
+    np.testing.assert_allclose(out, expected)
+
+
+def test_combine_ds_four_meas():
+    from sensmaps.compute import _combine_ds
+    L = [10.0, 20.0, 30.0, 40.0]
+    Y = [1.0, 1.0, 1.0, 1.0]
+    g = [np.full((2, 2), float(k + 1)) for k in range(4)]
+    out = _combine_ds(L, Y, g)
+    num = (g[1] - g[0]) + (g[3] - g[2])
+    den = (20 - 10) + (40 - 30)
+    np.testing.assert_allclose(out, num / den)
+
+
+def test_combine_ss_uses_y_weight():
+    """Y!=1 — verifies Y is actually applied (matters for v1.3's T/V types)."""
+    from sensmaps.compute import _combine_ss
+    L = [1.0, 1.0]
+    Y = [2.0, 3.0]
+    g0 = np.full((2, 2), 1.0)
+    g1 = np.full((2, 2), 1.0)
+    out = _combine_ss(L, Y, [g0, g1])
+    np.testing.assert_allclose(out, (3.0 * 1.0 - 2.0 * 1.0) / (3.0 - 2.0) * np.ones((2, 2)))

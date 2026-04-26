@@ -128,6 +128,26 @@ def _expand_optodes(arrangement: str, rs, rd, z_offset: float):
     raise ValueError(f"Unknown arrangement {arrangement!r}")
 
 
+def _combine_sd(L, Y, ll):
+    """SD combinator: Svox = ll[0] / L[0]. Port of makeS.m line 400."""
+    return ll[0] / L[0]
+
+
+def _combine_ss(L, Y, ll):
+    """SS / SD_DIFF combinator. Port of makeS.m lines 401-403."""
+    return (Y[1] * ll[1] - Y[0] * ll[0]) / (Y[1] * L[1] - Y[0] * L[0])
+
+
+def _combine_ds(L, Y, ll):
+    """DS combinator (4 measurements). Port of makeS.m lines 404-408."""
+    num = (Y[1] * ll[1] - Y[0] * ll[0]) + (Y[3] * ll[3] - Y[2] * ll[2])
+    den = (Y[1] * L[1]  - Y[0] * L[0])  + (Y[3] * L[3]  - Y[2] * L[2])
+    return num / den
+
+
+_ARRANGEMENT_COMBINE = {"SD": _combine_sd, "SS": _combine_ss, "DS": _combine_ds}
+
+
 from scipy.signal import fftconvolve
 
 from sensmaps.physics import (
