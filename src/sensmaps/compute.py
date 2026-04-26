@@ -10,9 +10,16 @@ laid out to make v2 additions a single-row change.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Callable, Sequence
 
 import numpy as np
+from scipy.signal import fftconvolve
+
+from sensmaps.physics import (
+    OpticalProperties,
+    continuous_part_path_len,
+    continuous_tot_path_len,
+)
 
 
 @dataclass
@@ -151,13 +158,22 @@ def _combine_ds(L, Y, ll):
 _ARRANGEMENT_COMBINE = {"SD": _combine_sd, "SS": _combine_ss, "DS": _combine_ds}
 
 
-from scipy.signal import fftconvolve
-
-from sensmaps.physics import (
-    OpticalProperties,
-    continuous_part_path_len,
-    continuous_tot_path_len,
-)
+# Per-measurement physics callables, keyed on (temporal, data_type).
+# Each entry is (L_fn, ll_fn, Y_fn). All callables accept **kwargs to absorb
+# parameters they don't use (notably fmod), so additions in v1.2/v1.3 don't
+# require touching the v1.1 entries.
+#   L_fn(rs_i, rd_i, opt_prop, **kw)               -> float
+#   ll_fn(rs_i, r_all, rd_i, V, opt_prop, **kw)    -> ndarray, shape (N_voxels,)
+#   Y_fn(rs_i, rd_i, opt_prop, **kw)               -> float
+_PHYSICS_DISPATCH: dict[tuple[str, str], tuple[Callable, Callable, Callable]] = {
+    ("CW", "I"): (
+        lambda rs_i, rd_i, op, **_:
+            float(continuous_tot_path_len(rs_i, rd_i, op)[0][0]),
+        lambda rs_i, r_all, rd_i, V, op, **_:
+            continuous_part_path_len(rs_i, r_all, rd_i, V, op),
+        lambda *_a, **_kw: 1.0,
+    ),
+}
 
 
 def apply_pert_kernel(
@@ -228,11 +244,15 @@ def make_s_full(
         raise NotImplementedError(
             f"sim_typ={sim_typ!r} is not implemented in v1 (DT only)"
         )
-    if not (parsed.temporal == "CW" and parsed.arrangement == "SD"
-            and parsed.data_type == "I"):
+
+    key = (parsed.temporal, parsed.data_type)
+    if key not in _PHYSICS_DISPATCH:
         raise NotImplementedError(
-            f"type_str={type_str!r} is not implemented in v1 (only CW_SD_I)"
+            f"type_str={type_str!r} is not implemented in v1.1 "
+            f"(no dispatch entry for {key})"
         )
+    L_fn, ll_fn, Y_fn = _PHYSICS_DISPATCH[key]
+
     # `pert % dr == 0` looks right but is a float-arithmetic trap
     # (1.0 % 0.1 == 0.09999...). Compare against the nearest integer multiple
     # of dr instead, with a small relative tolerance.
@@ -242,41 +262,42 @@ def make_s_full(
 
     params = GridParams.from_limits(xl=xl, yl=yl, zl=zl, dr=dr, pert=pert)
 
-    # z-offset the source by 1/musp (DT convention)
-    rs = np.atleast_2d(np.asarray(rs, dtype=np.float64))
-    rd = np.atleast_2d(np.asarray(rd, dtype=np.float64))
+    # Optode expansion + z-offset (handled in _expand_optodes).
+    rs_arr = np.atleast_2d(np.asarray(rs, dtype=np.float64))
+    rd_arr = np.atleast_2d(np.asarray(rd, dtype=np.float64))
     z_offset = 1.0 / opt_prop.musp
-    rs_used = rs + np.array([[0, 0, z_offset]])
+    rSrcs, rDets = _expand_optodes(parsed.arrangement, rs_arr, rd_arr, z_offset)
+    n_meas = rSrcs.shape[0]
 
-    # Build voxel-center coordinate matrix (Nx, Ny, Nz, 3)
+    # Voxel-center coordinate matrix (Nx, Ny, Nz, 3).
     XX, YY, ZZ = np.meshgrid(params.x, params.y, params.z, indexing="ij")
     r_all = np.column_stack([XX.ravel(), YY.ravel(), ZZ.ravel()])
-
-    # Total path length (scalar for SD)
-    L, _ = continuous_tot_path_len(rs_used, rd, opt_prop)
-    L_scalar = float(L[0])
-
-    # Partial path length per voxel. The diffusion-theory kernel diverges at
-    # r1=0 (voxel coincident with source), producing NaN there — handled by
-    # nan_to_num below; the resulting RuntimeWarnings are not informative.
-    with np.errstate(divide="ignore", invalid="ignore"):
-        l_vec = continuous_part_path_len(rs_used, r_all, rd, dr ** 3, opt_prop)
-    
-    # Values with z < 0 should not be calculated (set to 0)
     z_coords = r_all[:, 2]
-    l_vec[z_coords < 0] = 0.0
 
-    l_vec = np.nan_to_num(l_vec, nan=0.0)
-    ll = l_vec.reshape(XX.shape)
+    # Per-measurement physics.
+    Ls: list[float] = []
+    Ys: list[float] = []
+    lls: list[np.ndarray] = []
+    for i in range(n_meas):
+        rs_i = rSrcs[[i], :]
+        rd_i = rDets[[i], :]
+        Ls.append(L_fn(rs_i, rd_i, opt_prop))
+        Ys.append(Y_fn(rs_i, rd_i, opt_prop))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            l_vec = ll_fn(rs_i, r_all, rd_i, dr ** 3, opt_prop)
+        l_vec[z_coords < 0] = 0.0
+        l_vec = np.nan_to_num(l_vec, nan=0.0)
+        lls.append(l_vec.reshape(XX.shape))
 
-    Svox = ll / L_scalar
+    # Arrangement combinator.
+    Svox = _ARRANGEMENT_COMBINE[parsed.arrangement](Ls, Ys, lls)
 
     S = apply_pert_kernel(Svox, pert, dr)
 
     return SensitivityResult(
         S=S, Svox=Svox, params=params, type_str=type_str,
-        rs=rs_used, rd=rd, opt_prop=opt_prop, pert=tuple(pert), dr=dr,
-        Y_per_meas=np.array([1.0]),   # v1.0 path: SD with Y=1
+        rs=rSrcs, rd=rDets, opt_prop=opt_prop, pert=tuple(pert), dr=dr,
+        Y_per_meas=np.asarray(Ys, dtype=np.float64),
     )
 
 

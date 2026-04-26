@@ -125,7 +125,7 @@ def test_expand_optodes_rejects_bad_shapes():
 def test_make_s_rejects_unsupported_type():
     from sensmaps.compute import make_s
     from sensmaps.physics import OpticalProperties
-    with pytest.raises(NotImplementedError, match="CW_SD_I"):
+    with pytest.raises(NotImplementedError, match="not implemented"):
         make_s(
             type_str="FD_SS_P",
             rs=np.array([[0, 0, 0]]),
@@ -217,4 +217,27 @@ def test_sensitivity_result_kw_only_new_fields():
             np.zeros((1, 3)), np.zeros((1, 3)),
             op, (1.0, 1.0, 1.0), 1.0,
             np.array([1.0]),   # attempting positional for Y_per_meas
+        )
+
+
+def test_physics_dispatch_has_cw_i_entry():
+    from sensmaps.compute import _PHYSICS_DISPATCH
+    assert ("CW", "I") in _PHYSICS_DISPATCH
+    L_fn, ll_fn, Y_fn = _PHYSICS_DISPATCH[("CW", "I")]
+    assert callable(L_fn) and callable(ll_fn) and callable(Y_fn)
+
+
+def test_physics_dispatch_missing_pair_raises_via_make_s():
+    """Asking make_s for an unsupported (temporal, data_type) pair must raise."""
+    from sensmaps.compute import make_s
+    from sensmaps.physics import OpticalProperties
+    op = OpticalProperties()
+    with pytest.raises(NotImplementedError, match="not implemented"):
+        make_s(
+            type_str="TD_SD_GI",   # not in dispatch yet
+            rs=np.array([[0, 0, 0]]),
+            rd=np.array([[35, 0, 0]]),
+            opt_prop=op,
+            xl=(-5, 40), yl=(0, 0), zl=(0, 20),
+            dr=1.0,
         )
