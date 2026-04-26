@@ -59,6 +59,66 @@ def test_make_s_cw_sd_i_matches_matlab(cw_sd_i_ref):
     np.testing.assert_allclose(params.z, np.asarray(ref["z"], dtype=float))
 
 
+def test_expand_optodes_sd_returns_z_offset_sources():
+    from sensmaps.compute import _expand_optodes
+    rs = np.array([[0.0, 0.0, 0.0]])
+    rd = np.array([[35.0, 0.0, 0.0]])
+    rSrcs, rDets = _expand_optodes("SD", rs, rd, z_offset=1.0 / 1.1)
+    np.testing.assert_allclose(rSrcs, [[0.0, 0.0, 1.0 / 1.1]])
+    np.testing.assert_array_equal(rDets, rd)
+
+
+def test_expand_optodes_ss_one_src_two_dets():
+    from sensmaps.compute import _expand_optodes
+    rs = np.array([[0.0, 0.0, 0.0]])
+    rd = np.array([[20.0, 0.0, 0.0], [40.0, 0.0, 0.0]])
+    rSrcs, rDets = _expand_optodes("SS", rs, rd, z_offset=0.0)
+    assert rSrcs.shape == (2, 3)
+    np.testing.assert_array_equal(rSrcs[0], rSrcs[1])
+    np.testing.assert_array_equal(rDets, rd)
+
+
+def test_expand_optodes_ss_two_srcs_one_det():
+    from sensmaps.compute import _expand_optodes
+    rs = np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]])
+    rd = np.array([[35.0, 0.0, 0.0]])
+    rSrcs, rDets = _expand_optodes("SS", rs, rd, z_offset=0.0)
+    np.testing.assert_array_equal(rSrcs, rs)
+    assert rDets.shape == (2, 3)
+    np.testing.assert_array_equal(rDets[0], rDets[1])
+
+
+def test_expand_optodes_ds_meas_pattern():
+    from sensmaps.compute import _expand_optodes
+    rs = np.array([[0.0, 0, 0], [10.0, 0, 0]])
+    rd = np.array([[30.0, 0, 0], [40.0, 0, 0]])
+    rSrcs, rDets = _expand_optodes("DS", rs, rd, z_offset=0.0)
+    # MATLAB pattern: rSrcs = [rs1; rs1; rs2; rs2]
+    np.testing.assert_array_equal(rSrcs[[0, 1]], np.tile(rs[0], (2, 1)))
+    np.testing.assert_array_equal(rSrcs[[2, 3]], np.tile(rs[1], (2, 1)))
+    # rDets = [rd; flipud(rd)] = [rd1; rd2; rd2; rd1]
+    np.testing.assert_array_equal(rDets[0], rd[0])
+    np.testing.assert_array_equal(rDets[1], rd[1])
+    np.testing.assert_array_equal(rDets[2], rd[1])
+    np.testing.assert_array_equal(rDets[3], rd[0])
+
+
+def test_expand_optodes_rejects_bad_shapes():
+    from sensmaps.compute import _expand_optodes
+    rs1 = np.array([[0.0, 0, 0]])
+    rs2 = np.array([[0.0, 0, 0], [10, 0, 0]])
+    rd1 = np.array([[35.0, 0, 0]])
+    rd2 = np.array([[30.0, 0, 0], [40, 0, 0]])
+    with pytest.raises(ValueError, match="'SD'"):
+        _expand_optodes("SD", rs2, rd1, z_offset=0.0)
+    with pytest.raises(ValueError, match="'SS'"):
+        _expand_optodes("SS", rs1, rd1, z_offset=0.0)
+    with pytest.raises(ValueError, match="'DS'"):
+        _expand_optodes("DS", rs1, rd2, z_offset=0.0)
+    with pytest.raises(ValueError, match="Unknown arrangement"):
+        _expand_optodes("BOGUS", rs1, rd1, z_offset=0.0)
+
+
 def test_make_s_rejects_unsupported_type():
     from sensmaps.compute import make_s
     from sensmaps.physics import OpticalProperties

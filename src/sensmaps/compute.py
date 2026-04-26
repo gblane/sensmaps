@@ -86,6 +86,48 @@ def parse_type_str(type_str: str) -> ParsedType:
     return ParsedType(temporal=temporal, arrangement=arrangement, data_type=data_type)
 
 
+def _expand_optodes(arrangement: str, rs, rd, z_offset: float):
+    """Expand (rs, rd) into per-measurement (rSrcs, rDets) pairs.
+
+    Mirrors MATLAB makeS.m lines 123-149. Applies the z-offset to
+    sources only. Validates optode counts against the arrangement.
+
+    Returns
+    -------
+    rSrcs : ndarray, shape (N_meas, 3)
+    rDets : ndarray, shape (N_meas, 3)
+    """
+    rs = np.atleast_2d(np.asarray(rs, dtype=np.float64))
+    rd = np.atleast_2d(np.asarray(rd, dtype=np.float64))
+    z_off = np.array([0.0, 0.0, z_offset])
+    if arrangement == "SD":
+        if rs.shape != (1, 3) or rd.shape != (1, 3):
+            raise ValueError(
+                f"Incorrect optode count for arrangement 'SD': "
+                f"rs.shape={rs.shape}, rd.shape={rd.shape}"
+            )
+        return rs + z_off, rd
+    if arrangement == "SS":
+        if rs.shape == (1, 3) and rd.shape == (2, 3):
+            return np.tile(rs, (2, 1)) + z_off, rd
+        if rs.shape == (2, 3) and rd.shape == (1, 3):
+            return rs + z_off, np.tile(rd, (2, 1))
+        raise ValueError(
+            f"Incorrect optode count for arrangement 'SS': "
+            f"rs.shape={rs.shape}, rd.shape={rd.shape}"
+        )
+    if arrangement == "DS":
+        if rs.shape != (2, 3) or rd.shape != (2, 3):
+            raise ValueError(
+                f"Incorrect optode count for arrangement 'DS': "
+                f"rs.shape={rs.shape}, rd.shape={rd.shape}"
+            )
+        rSrcs = np.vstack([rs[[0, 0], :], rs[[1, 1], :]])
+        rDets = np.vstack([rd, np.flipud(rd)])
+        return rSrcs + z_off, rDets
+    raise ValueError(f"Unknown arrangement {arrangement!r}")
+
+
 from scipy.signal import fftconvolve
 
 from sensmaps.physics import (
