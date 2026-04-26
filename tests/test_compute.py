@@ -209,3 +209,12 @@ def test_sensitivity_result_kw_only_new_fields():
     )
     assert r.fmod is None
     np.testing.assert_array_equal(r.Y_per_meas, [1.0])
+
+    # Positional Y_per_meas must be rejected — kw-only is the whole point.
+    with pytest.raises(TypeError):
+        SensitivityResult(
+            arr, arr, g, "CW_SD_I",
+            np.zeros((1, 3)), np.zeros((1, 3)),
+            op, (1.0, 1.0, 1.0), 1.0,
+            np.array([1.0]),   # attempting positional for Y_per_meas
+        )
