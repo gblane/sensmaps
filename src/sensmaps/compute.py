@@ -9,7 +9,7 @@ laid out to make v2 additions a single-row change.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Sequence
 
 import numpy as np
@@ -173,8 +173,8 @@ def apply_pert_kernel(
 class SensitivityResult:
     """Return type of make_s_full.
 
-    Attributes
-    ----------
+    Attributes (v1.0)
+    -----------------
     S         : ndarray, shape (Nx, Ny, Nz) — sensitivity (pert-convolved)
     Svox      : ndarray, shape (Nx, Ny, Nz) — per-voxel pre-conv sensitivity
     params    : GridParams
@@ -182,6 +182,12 @@ class SensitivityResult:
     rs, rd    : source and detector coords actually used (post z-offset) [mm]
     opt_prop  : OpticalProperties
     pert, dr  : perturbation and voxel size used
+
+    New in v1.1 (kw-only)
+    ---------------------
+    Y_per_meas : ndarray, shape (N_meas,) — measured signal Y per measurement;
+                 1.0 for v1.1 combos, plumbed for v1.3's T/V.
+    fmod       : float | None — modulation frequency [Hz] for FD types; None for CW.
     """
 
     S: np.ndarray
@@ -193,6 +199,9 @@ class SensitivityResult:
     opt_prop: OpticalProperties
     pert: tuple[float, float, float]
     dr: float
+    # NEW in v1.1 — kw-only so existing positional construction keeps working:
+    Y_per_meas: np.ndarray = field(kw_only=True)
+    fmod: float | None = field(default=None, kw_only=True)
 
 
 def make_s_full(
@@ -267,6 +276,7 @@ def make_s_full(
     return SensitivityResult(
         S=S, Svox=Svox, params=params, type_str=type_str,
         rs=rs_used, rd=rd, opt_prop=opt_prop, pert=tuple(pert), dr=dr,
+        Y_per_meas=np.array([1.0]),   # v1.0 path: SD with Y=1
     )
 
 

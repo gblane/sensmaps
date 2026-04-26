@@ -190,3 +190,22 @@ def test_combine_ds_uses_y_weight():
     expected_num = (3.0 * 1.0 - 2.0 * 1.0) + (7.0 * 1.0 - 5.0 * 1.0)  # 1 + 2 = 3
     expected_den = (3.0 * 1.0 - 2.0 * 1.0) + (7.0 * 1.0 - 5.0 * 1.0)  # 1 + 2 = 3
     np.testing.assert_allclose(out, np.full((2, 2), expected_num / expected_den))
+
+
+def test_sensitivity_result_kw_only_new_fields():
+    """v1.1 adds Y_per_meas (required, kw-only) and fmod (optional, kw-only)."""
+    from sensmaps.compute import GridParams, SensitivityResult
+    from sensmaps.physics import OpticalProperties
+    g = GridParams.from_limits(xl=(0, 1), yl=(0, 1), zl=(0, 1), dr=1.0)
+    arr = np.zeros((2, 2, 2))
+    op = OpticalProperties()
+    # All new fields must be passed by keyword.
+    r = SensitivityResult(
+        S=arr, Svox=arr, params=g, type_str="CW_SD_I",
+        rs=np.zeros((1, 3)), rd=np.zeros((1, 3)),
+        opt_prop=op, pert=(1.0, 1.0, 1.0), dr=1.0,
+        Y_per_meas=np.array([1.0]),       # required kw-only
+        # fmod omitted on purpose — defaults to None.
+    )
+    assert r.fmod is None
+    np.testing.assert_array_equal(r.Y_per_meas, [1.0])
