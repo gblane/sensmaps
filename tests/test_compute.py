@@ -72,10 +72,12 @@ def test_expand_optodes_ss_one_src_two_dets():
     from sensmaps.compute import _expand_optodes
     rs = np.array([[0.0, 0.0, 0.0]])
     rd = np.array([[20.0, 0.0, 0.0], [40.0, 0.0, 0.0]])
-    rSrcs, rDets = _expand_optodes("SS", rs, rd, z_offset=0.0)
+    z = 1.0 / 1.1
+    rSrcs, rDets = _expand_optodes("SS", rs, rd, z_offset=z)
     assert rSrcs.shape == (2, 3)
     np.testing.assert_array_equal(rSrcs[0], rSrcs[1])
-    np.testing.assert_array_equal(rDets, rd)
+    np.testing.assert_allclose(rSrcs[0], [0.0, 0.0, z])  # offset on tiled sources
+    np.testing.assert_array_equal(rDets, rd)             # detectors untouched
 
 
 def test_expand_optodes_ss_two_srcs_one_det():
@@ -86,6 +88,7 @@ def test_expand_optodes_ss_two_srcs_one_det():
     np.testing.assert_array_equal(rSrcs, rs)
     assert rDets.shape == (2, 3)
     np.testing.assert_array_equal(rDets[0], rDets[1])
+    np.testing.assert_array_equal(rDets[0], rd[0])
 
 
 def test_expand_optodes_ds_meas_pattern():
