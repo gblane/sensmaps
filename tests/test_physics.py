@@ -118,3 +118,65 @@ def test_continuous_wrappers_return_real_and_match_cw(cw_sd_i_ref):
     np.testing.assert_allclose(R[0], float(complex(ref["R_test_cw"]).real), rtol=1e-10)
     np.testing.assert_allclose(L[0], float(complex(ref["L_test_cw"]).real), rtol=1e-10)
     np.testing.assert_allclose(l[0], float(complex(ref["l_test_cw"]).real), rtol=1e-10)
+
+
+# ---- v1.2 temporal physics ----
+
+def _td_op(ref) -> OpticalProperties:
+    return OpticalProperties(
+        n_in=float(ref["nin"]), n_out=float(ref["nout"]),
+        musp=float(ref["musp"]), mua=float(ref["mua"]),
+    )
+
+
+def test_temporal_reflectance_matches_matlab(td_physics_refs):
+    from sensmaps.physics import temporal_reflectance
+    ref = td_physics_refs
+    op = _td_op(ref)
+    R = temporal_reflectance(ref["td_rs"], ref["td_rd"], ref["td_t"], op)
+    np.testing.assert_allclose(R[0], np.asarray(ref["td_R_t"]).ravel(), rtol=1e-10)
+
+
+def test_temporal_fluence_matches_matlab(td_physics_refs):
+    from sensmaps.physics import temporal_fluence
+    ref = td_physics_refs
+    op = _td_op(ref)
+    # Fixture computes fluence at td_rd (the detector position acting as r)
+    PHI = temporal_fluence(ref["td_rs"], ref["td_rd"], ref["td_t"], op)
+    np.testing.assert_allclose(PHI[0], np.asarray(ref["td_PHI_t"]).ravel(), rtol=1e-10)
+
+
+def test_temporal_reflectance_zero_for_nonpositive_t(td_physics_refs):
+    from sensmaps.physics import temporal_reflectance
+    op = _td_op(td_physics_refs)
+    R = temporal_reflectance(td_physics_refs["td_rs"], td_physics_refs["td_rd"],
+                             np.array([-50.0, 0.0, 50.0]), op)
+    assert R[0, 0] == 0.0
+    assert R[0, 1] == 0.0
+    assert R[0, 2] > 0.0
+
+
+def test_temporal_gate_tot_path_len_matches_matlab(td_physics_refs):
+    from sensmaps.physics import temporal_gate_tot_path_len
+    ref = td_physics_refs
+    op = _td_op(ref)
+    L = temporal_gate_tot_path_len(
+        ref["td_rs"], ref["td_rd"], ref["td_tg"], op,
+        conv_t=float(ref["combos_tend"]),
+        conv_dt=float(ref["combos_tend"]) / float(ref["combos_ndt"]),
+    )
+    np.testing.assert_allclose(L, float(ref["td_L_gate"]), rtol=1e-10)
+
+
+def test_temporal_gate_part_path_len_matches_matlab(td_physics_refs):
+    from sensmaps.physics import temporal_gate_part_path_len
+    ref = td_physics_refs
+    op = _td_op(ref)
+    dr = 1.0  # matches generate_fixtures.m combos_dr
+    l = temporal_gate_part_path_len(
+        ref["td_rs"], ref["td_r_test"], ref["td_rd"], dr**3,
+        ref["td_tg"], op,
+        conv_t=float(ref["combos_tend"]),
+        conv_dt=float(ref["combos_tend"]) / float(ref["combos_ndt"]),
+    )
+    np.testing.assert_allclose(l[0], float(ref["td_l_gate"]), rtol=1e-8)
