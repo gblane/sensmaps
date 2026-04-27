@@ -60,6 +60,7 @@ PARAM_CLASS: dict[str, str] = {
     "yl": "expensive",
     "zl": "expensive",
     "dr": "expensive",
+    "fmod": "expensive",                  # NEW
     "pert": "cheap",
     "pert_override": "cheap",
     "slice_axis": "cheap",
@@ -146,10 +147,15 @@ class ParameterPanel:
         row = 0
 
         # Type
+        _VALID_TYPES = [
+            "CW_SD_I", "CW_SS_I", "CW_DS_I",
+            "FD_SD_I", "FD_SS_I", "FD_DS_I",
+            "FD_SD_P", "FD_SS_P", "FD_DS_P",
+        ]
         ttk.Label(f, text="Type").grid(row=row, column=0, sticky="w")
         self._vars["type_str"] = tk.StringVar(value="CW_SD_I")
         cb_type = ttk.Combobox(f, textvariable=self._vars["type_str"],
-                               values=["CW_SD_I"], state="readonly", width=12)
+                               values=_VALID_TYPES, state="readonly", width=12)
         cb_type.grid(row=row, column=1, sticky="ew")
         self._inputs.append(cb_type)
         row += 1

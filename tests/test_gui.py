@@ -271,3 +271,21 @@ def test_fmod_field_enabled_for_fd(tk_root):
     panel = ParameterPanel(master=tk_root)
     panel.set_values({"type_str": "FD_SD_I"})
     assert str(panel._fmod_entry.cget("state")) == "normal"
+
+
+def test_param_class_classifies_fmod_as_expensive(tk_root):
+    from sensmaps.gui import PARAM_CLASS
+    assert PARAM_CLASS["fmod"] == "expensive"
+
+
+def test_type_combobox_lists_v1_1_combos(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    # The combobox is the first widget in panel._inputs (built first in _build_widgets).
+    cb_type = panel._inputs[0]
+    expected = [
+        "CW_SD_I", "CW_SS_I", "CW_DS_I",
+        "FD_SD_I", "FD_SS_I", "FD_DS_I",
+        "FD_SD_P", "FD_SS_P", "FD_DS_P",
+    ]
+    assert list(cb_type.cget("values")) == expected
