@@ -270,3 +270,39 @@ def test_combo_ref_fixture_loads(combo_name, request):
     ref = request.getfixturevalue("combo_ref_" + combo_name)
     assert "S" in ref and "Svox" in ref
     assert ref["S"].ndim == 3
+
+
+@pytest.mark.parametrize("combo_name, type_str", [
+    ("cw_ss_i", "CW_SS_I"),
+    ("cw_ds_i", "CW_DS_I"),
+    ("fd_sd_i", "FD_SD_I"),
+    ("fd_sd_p", "FD_SD_P"),
+    ("fd_ss_i", "FD_SS_I"),
+    ("fd_ss_p", "FD_SS_P"),
+    ("fd_ds_i", "FD_DS_I"),
+    ("fd_ds_p", "FD_DS_P"),
+])
+def test_make_s_combo_matches_matlab(combo_name, type_str, request):
+    from sensmaps.compute import make_s
+    from sensmaps.physics import OpticalProperties
+    ref = request.getfixturevalue(f"combo_ref_{combo_name}")
+
+    op = OpticalProperties(
+        n_in=float(ref["nin"]), n_out=float(ref["nout"]),
+        musp=float(ref["musp"]), mua=float(ref["mua"]),
+    )
+    rs = np.asarray(ref["rs"], dtype=float)
+    rd = np.asarray(ref["rd"], dtype=float)
+    fmod = float(ref["fmod_hz"]) if type_str.startswith("FD_") else None
+
+    S, _ = make_s(
+        type_str=type_str,
+        rs=rs, rd=rd, opt_prop=op,
+        xl=(float(ref["xl"][0]), float(ref["xl"][1])),
+        yl=(float(ref["yl"][0]), float(ref["yl"][1])),
+        zl=(float(ref["zl"][0]), float(ref["zl"][1])),
+        dr=float(ref["dr"]),
+        pert=tuple(float(p) for p in ref["pert"]),
+        fmod=fmod,
+    )
+    np.testing.assert_allclose(S, ref["S"], rtol=1e-8, atol=1e-12)

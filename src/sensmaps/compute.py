@@ -17,6 +17,8 @@ from scipy.signal import fftconvolve
 
 from sensmaps.physics import (
     OpticalProperties,
+    complex_part_path_len,
+    complex_tot_path_len,
     continuous_part_path_len,
     continuous_tot_path_len,
 )
@@ -171,6 +173,20 @@ _PHYSICS_DISPATCH: dict[tuple[str, str], tuple[Callable, Callable, Callable]] = 
             float(continuous_tot_path_len(rs_i, rd_i, op)[0][0]),
         lambda rs_i, r_all, rd_i, V, op, **_:
             continuous_part_path_len(rs_i, r_all, rd_i, V, op),
+        lambda *_a, **_kw: 1.0,
+    ),
+    ("FD", "I"): (
+        lambda rs_i, rd_i, op, fmod, **_:
+            float(complex_tot_path_len(rs_i, rd_i, 2.0 * np.pi * fmod, op)[0][0].real),
+        lambda rs_i, r_all, rd_i, V, op, fmod, **_:
+            complex_part_path_len(rs_i, r_all, rd_i, V, 2.0 * np.pi * fmod, op).real,
+        lambda *_a, **_kw: 1.0,
+    ),
+    ("FD", "P"): (
+        lambda rs_i, rd_i, op, fmod, **_:
+            float(complex_tot_path_len(rs_i, rd_i, 2.0 * np.pi * fmod, op)[0][0].imag),
+        lambda rs_i, r_all, rd_i, V, op, fmod, **_:
+            complex_part_path_len(rs_i, r_all, rd_i, V, 2.0 * np.pi * fmod, op).imag,
         lambda *_a, **_kw: 1.0,
     ),
 }
