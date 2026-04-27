@@ -231,6 +231,8 @@ def make_s_full(
     dr: float,
     pert: Sequence[float] = (1.0, 1.0, 1.0),
     sim_typ: str = "DT",
+    *,
+    fmod: float | None = None,
 ) -> SensitivityResult:
     """Compute sensitivity map for a measurement type. Mirror of MATLAB makeS.m.
 
@@ -243,6 +245,11 @@ def make_s_full(
     if sim_typ != "DT":
         raise NotImplementedError(
             f"sim_typ={sim_typ!r} is not implemented in v1 (DT only)"
+        )
+
+    if parsed.temporal == "FD" and fmod is None:
+        raise ValueError(
+            f"fmod is required for FD_* types (got fmod=None for {type_str!r})"
         )
 
     key = (parsed.temporal, parsed.data_type)
@@ -281,10 +288,10 @@ def make_s_full(
     for i in range(n_meas):
         rs_i = rSrcs[[i], :]
         rd_i = rDets[[i], :]
-        Ls.append(L_fn(rs_i, rd_i, opt_prop))
-        Ys.append(Y_fn(rs_i, rd_i, opt_prop))
+        Ls.append(L_fn(rs_i, rd_i, opt_prop, fmod=fmod))
+        Ys.append(Y_fn(rs_i, rd_i, opt_prop, fmod=fmod))
         with np.errstate(divide="ignore", invalid="ignore"):
-            l_vec = ll_fn(rs_i, r_all, rd_i, dr ** 3, opt_prop)
+            l_vec = ll_fn(rs_i, r_all, rd_i, dr ** 3, opt_prop, fmod=fmod)
         l_vec[z_coords < 0] = 0.0
         l_vec = np.nan_to_num(l_vec, nan=0.0)
         lls.append(l_vec.reshape(XX.shape))
@@ -298,6 +305,7 @@ def make_s_full(
         S=S, Svox=Svox, params=params, type_str=type_str,
         rs=rSrcs, rd=rDets, opt_prop=opt_prop, pert=tuple(pert), dr=dr,
         Y_per_meas=np.asarray(Ys, dtype=np.float64),
+        fmod=fmod,
     )
 
 
@@ -312,10 +320,13 @@ def make_s(
     dr: float,
     pert: Sequence[float] = (1.0, 1.0, 1.0),
     sim_typ: str = "DT",
+    *,
+    fmod: float | None = None,
 ):
     """Thin variant returning only `(S, params)`. See `make_s_full` for details."""
     result = make_s_full(
         type_str=type_str, rs=rs, rd=rd, opt_prop=opt_prop,
         xl=xl, yl=yl, zl=zl, dr=dr, pert=pert, sim_typ=sim_typ,
+        fmod=fmod,
     )
     return result.S, result.params

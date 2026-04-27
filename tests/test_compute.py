@@ -127,7 +127,7 @@ def test_make_s_rejects_unsupported_type():
     from sensmaps.physics import OpticalProperties
     with pytest.raises(NotImplementedError, match="no dispatch entry"):
         make_s(
-            type_str="FD_SS_P",
+            type_str="TD_SS_P",
             rs=np.array([[0, 0, 0]]),
             rd=np.array([[25, 0, 0]]),
             opt_prop=OpticalProperties(),
@@ -240,4 +240,20 @@ def test_physics_dispatch_missing_pair_raises_via_make_s():
             opt_prop=op,
             xl=(-5, 40), yl=(0, 0), zl=(0, 20),
             dr=1.0,
+        )
+
+
+def test_make_s_rejects_fmod_none_for_fd():
+    from sensmaps.compute import make_s
+    from sensmaps.physics import OpticalProperties
+    op = OpticalProperties()
+    with pytest.raises(ValueError, match="fmod is required"):
+        make_s(
+            type_str="FD_SD_I",
+            rs=np.array([[0, 0, 0]]),
+            rd=np.array([[35, 0, 0]]),
+            opt_prop=op,
+            xl=(-5, 40), yl=(0, 0), zl=(0, 20),
+            dr=1.0,
+            # fmod intentionally omitted
         )
