@@ -575,6 +575,7 @@ class MainWindow:
                 type_str=c.type_str,
                 n_in=c.opt_prop.n_in, n_out=c.opt_prop.n_out,
                 musp=c.opt_prop.musp, mua=c.opt_prop.mua,
+                fmod=(np.nan if c.fmod is None else c.fmod),    # NEW
                 sensmaps_version=version,
             )
         except Exception as e:

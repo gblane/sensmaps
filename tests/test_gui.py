@@ -373,3 +373,26 @@ def test_main_window_recalculates_fd_sd_i(tk_root, tmp_path, monkeypatch, reques
     mw.recalculate()
     assert mw._cache is not None
     np.testing.assert_allclose(mw._cache.S, ref["S"], rtol=1e-8, atol=1e-12)
+
+
+def test_save_data_archive_includes_fmod(tk_root, tmp_path, monkeypatch):
+    """save_data must round-trip fmod (NaN for CW, exact Hz for FD)."""
+    monkeypatch.chdir(tmp_path)
+    from sensmaps.gui import MainWindow
+    mw = MainWindow(master=tk_root)
+    # Default state is CW_SD_I — fmod should serialize as NaN.
+    out = tmp_path / "cw.npz"
+    monkeypatch.setattr("tkinter.filedialog.asksaveasfilename", lambda **_: str(out))
+    mw.save_data()
+    arr = np.load(out)
+    assert "fmod" in arr.files
+    assert np.isnan(float(arr["fmod"]))
+
+    # Switch to FD and rerun — fmod should match the form value (in Hz).
+    mw.params_panel.set_values({"type_str": "FD_SD_I", "fmod": 100.0})
+    mw.recalculate()
+    out2 = tmp_path / "fd.npz"
+    monkeypatch.setattr("tkinter.filedialog.asksaveasfilename", lambda **_: str(out2))
+    mw.save_data()
+    arr2 = np.load(out2)
+    assert float(arr2["fmod"]) == 100.0 * 1e6
