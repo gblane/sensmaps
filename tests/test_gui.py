@@ -341,3 +341,35 @@ def test_old_v1_session_json_loads_into_v1_1(tk_root, tmp_path, monkeypatch):
     assert got["fmod"] == 100.0
     # Cache built from defaults — auto-recalc on launch works.
     assert mw._cache is not None
+
+
+def test_main_window_recalculates_fd_sd_i(tk_root, tmp_path, monkeypatch, request):
+    monkeypatch.chdir(tmp_path)
+    ref = request.getfixturevalue("combo_ref_fd_sd_i")
+    from sensmaps.gui import MainWindow
+
+    mw = MainWindow(master=tk_root)
+    values = {
+        "type_str": "FD_SD_I",
+        "rs": [[float(ref["rs"][0, 0]), float(ref["rs"][0, 1]), float(ref["rs"][0, 2])]],
+        "rd": [[float(ref["rd"][0, 0]), float(ref["rd"][0, 1]), float(ref["rd"][0, 2])]],
+        "opt_prop": {
+            "n_in":  float(ref["nin"]),
+            "n_out": float(ref["nout"]),
+            "musp":  float(ref["musp"]),
+            "mua":   float(ref["mua"]),
+        },
+        "xl": [float(ref["xl"][0]), float(ref["xl"][1])],
+        "yl": [float(ref["yl"][0]), float(ref["yl"][1])],
+        "zl": [float(ref["zl"][0]), float(ref["zl"][1])],
+        "dr": float(ref["dr"]),
+        "fmod": float(ref["fmod_hz"]) / 1e6,         # GUI stores MHz
+        "pert": [float(p) for p in ref["pert"]],
+        "slice_axis": "y",
+        "slice_value": 0.0,
+        "quantiles": [0.05, 0.95],
+    }
+    mw.params_panel.set_values(values)
+    mw.recalculate()
+    assert mw._cache is not None
+    np.testing.assert_allclose(mw._cache.S, ref["S"], rtol=1e-8, atol=1e-12)
