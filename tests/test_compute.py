@@ -257,3 +257,16 @@ def test_make_s_rejects_fmod_none_for_fd():
             dr=1.0,
             # fmod intentionally omitted
         )
+
+
+@pytest.mark.parametrize("combo_name", [
+    "cw_ss_i", "cw_ds_i",
+    "fd_sd_i", "fd_sd_p",
+    "fd_ss_i", "fd_ss_p",
+    "fd_ds_i", "fd_ds_p",
+])
+def test_combo_ref_fixture_loads(combo_name, request):
+    """Sanity: each fixture file loads into a dict with the expected keys."""
+    ref = request.getfixturevalue("combo_ref_" + combo_name)
+    assert "S" in ref and "Svox" in ref
+    assert ref["S"].ndim == 3
