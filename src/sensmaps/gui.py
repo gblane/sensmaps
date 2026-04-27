@@ -70,8 +70,8 @@ PARAM_CLASS: dict[str, str] = {
 
 _DEFAULTS: dict[str, Any] = {
     "type_str": "CW_SD_I",
-    "rs": [0.0, 0.0, 0.0],
-    "rd": [35.0, 0.0, 0.0],
+    "rs": [[0.0, 0.0, 0.0]],
+    "rd": [[35.0, 0.0, 0.0]],
     "opt_prop": {
         "n_in": 1.333, "n_out": 1.0, "musp": 1.1, "mua": 0.011,
     },
@@ -154,14 +154,14 @@ class ParameterPanel:
         row += 1
 
         # Optodes
-        ttk.Label(f, text="rs [x y z] (mm)").grid(row=row, column=0, sticky="w")
+        ttk.Label(f, text="rs [x y z; ...] (mm)").grid(row=row, column=0, sticky="w")
         self._vars["rs"] = tk.StringVar()
         en_rs = ttk.Entry(f, textvariable=self._vars["rs"], width=20)
         en_rs.grid(row=row, column=1, sticky="ew")
         self._inputs.append(en_rs)
         row += 1
 
-        ttk.Label(f, text="rd [x y z] (mm)").grid(row=row, column=0, sticky="w")
+        ttk.Label(f, text="rd [x y z; ...] (mm)").grid(row=row, column=0, sticky="w")
         self._vars["rd"] = tk.StringVar()
         en_rd = ttk.Entry(f, textvariable=self._vars["rd"], width=20)
         en_rd.grid(row=row, column=1, sticky="ew")
@@ -265,8 +265,8 @@ class ParameterPanel:
         v = self._vars
         return {
             "type_str": v["type_str"].get(),
-            "rs": _parse_float_list(v["rs"].get(), 3),
-            "rd": _parse_float_list(v["rd"].get(), 3),
+            "rs": _parse_float_matrix(v["rs"].get(), 3),
+            "rd": _parse_float_matrix(v["rd"].get(), 3),
             "opt_prop": {
                 "n_in":  float(v["opt_prop.n_in"].get()),
                 "n_out": float(v["opt_prop.n_out"].get()),
@@ -288,7 +288,8 @@ class ParameterPanel:
     _VALID_OPT_PROP_KEYS = frozenset(("n_in", "n_out", "musp", "mua"))
 
     def set_values(self, values: dict[str, Any]) -> None:
-        def _fmt_list(xs): return " ".join(f"{x:g}" for x in xs)
+        def _fmt_list(xs):    return " ".join(f"{x:g}" for x in xs)
+        def _fmt_matrix(xss): return "; ".join(_fmt_list(xs) for xs in xss)
 
         unknown = set(values) - self._VALID_KEYS
         if unknown:
@@ -307,9 +308,9 @@ class ParameterPanel:
         if "type_str" in values:
             self._vars["type_str"].set(values["type_str"])
         if "rs" in values:
-            self._vars["rs"].set(_fmt_list(values["rs"]))
+            self._vars["rs"].set(_fmt_matrix(values["rs"]))
         if "rd" in values:
-            self._vars["rd"].set(_fmt_list(values["rd"]))
+            self._vars["rd"].set(_fmt_matrix(values["rd"]))
         if "opt_prop" in values:
             op = values["opt_prop"]
             for k in ("n_in", "n_out", "musp", "mua"):
@@ -474,8 +475,8 @@ class MainWindow:
             op = _opt_prop_from_dict(values["opt_prop"])
             result = make_s_full(
                 type_str=values["type_str"],
-                rs=np.array([values["rs"]]),
-                rd=np.array([values["rd"]]),
+                rs=np.asarray(values["rs"], dtype=float),
+                rd=np.asarray(values["rd"], dtype=float),
                 opt_prop=op,
                 xl=tuple(values["xl"]),
                 yl=tuple(values["yl"]),

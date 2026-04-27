@@ -56,19 +56,19 @@ def test_parameter_panel_reads_and_writes_values(tk_root):
     assert defaults["type_str"] == "CW_SD_I"
     assert defaults["slice_axis"] in ("x", "y", "z")
     assert isinstance(defaults["rs"], list)
-    assert len(defaults["rs"]) == 3
+    assert len(defaults["rs"]) == 1  # single row
     assert isinstance(defaults["opt_prop"], dict)
     assert "musp" in defaults["opt_prop"]
 
     # Round-trip set_values → get_values
     new_vals = dict(defaults)
     new_vals["opt_prop"] = dict(defaults["opt_prop"], musp=1.2, mua=0.02)
-    new_vals["rs"] = [1.0, 2.0, 3.0]
+    new_vals["rs"] = [[1.0, 2.0, 3.0]]
     panel.set_values(new_vals)
     got = panel.get_values()
     assert got["opt_prop"]["musp"] == 1.2
     assert got["opt_prop"]["mua"] == 0.02
-    assert got["rs"] == [1.0, 2.0, 3.0]
+    assert got["rs"] == [[1.0, 2.0, 3.0]]
 
 
 def test_parameter_panel_pert_syncing(tk_root):
@@ -121,8 +121,8 @@ def test_main_window_constructs_and_recalculates(tk_root, tmp_path, monkeypatch,
     # Set the form to values that match the fixture
     values = {
         "type_str": "CW_SD_I",
-        "rs": [0.0, 0.0, 0.0],
-        "rd": [float(ref["rho"]), 0.0, 0.0],
+        "rs": [[0.0, 0.0, 0.0]],
+        "rd": [[float(ref["rho"]), 0.0, 0.0]],
         "opt_prop": {
             "n_in":  float(ref["nin"]),
             "n_out": float(ref["nout"]),
@@ -151,7 +151,7 @@ def test_session_persistence_round_trip(tk_root, tmp_path, monkeypatch):
     mw1 = MainWindow(master=tk_root)
     vals = mw1.params_panel.get_values()
     vals["opt_prop"]["musp"] = 1.7
-    vals["rs"] = [1.0, 2.0, 3.0]
+    vals["rs"] = [[1.0, 2.0, 3.0]]
     mw1.params_panel.set_values(vals)
     mw1.save_session()
 
@@ -159,7 +159,7 @@ def test_session_persistence_round_trip(tk_root, tmp_path, monkeypatch):
     mw2.load_session()
     got = mw2.params_panel.get_values()
     assert got["opt_prop"]["musp"] == 1.7
-    assert got["rs"] == [1.0, 2.0, 3.0]
+    assert got["rs"] == [[1.0, 2.0, 3.0]]
 
 
 def test_revert_restores_to_last_computed(tk_root, tmp_path, monkeypatch, cw_sd_i_ref):
@@ -169,8 +169,8 @@ def test_revert_restores_to_last_computed(tk_root, tmp_path, monkeypatch, cw_sd_
     mw = MainWindow(master=tk_root)
     values = {
         "type_str": "CW_SD_I",
-        "rs": [0.0, 0.0, 0.0],
-        "rd": [float(ref["rho"]), 0.0, 0.0],
+        "rs": [[0.0, 0.0, 0.0]],
+        "rd": [[float(ref["rho"]), 0.0, 0.0]],
         "opt_prop": {"n_in": 1.333, "n_out": 1.0, "musp": 1.1, "mua": 0.011},
         "xl": [-5.0, 40.0], "yl": [0.0, 0.0], "zl": [0.0, 20.0],
         "dr": 1.0, "pert": [1.0, 1.0, 1.0],
@@ -179,12 +179,12 @@ def test_revert_restores_to_last_computed(tk_root, tmp_path, monkeypatch, cw_sd_
     mw.params_panel.set_values(values)
     mw.recalculate()
     # Mutate an expensive field
-    dirty = dict(values); dirty["rs"] = [5.0, 5.0, 5.0]
+    dirty = dict(values); dirty["rs"] = [[5.0, 5.0, 5.0]]
     mw.params_panel.set_values(dirty)
     assert mw.is_dirty
     mw.revert()
     got = mw.params_panel.get_values()
-    assert got["rs"] == [0.0, 0.0, 0.0]
+    assert got["rs"] == [[0.0, 0.0, 0.0]]
     assert not mw.is_dirty
 
 
@@ -229,3 +229,24 @@ def test_parse_float_matrix_rejects_empty_input():
         _parse_float_matrix("", 3)
     with pytest.raises(ValueError, match="at least one row"):
         _parse_float_matrix(";", 3)
+
+
+def test_parameter_panel_round_trips_multi_row_rs(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    panel.set_values({
+        "rs": [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+        "rd": [[35.0, 0.0, 0.0]],
+    })
+    got = panel.get_values()
+    assert got["rs"] == [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]]
+    assert got["rd"] == [[35.0, 0.0, 0.0]]
+
+
+def test_parameter_panel_default_rs_is_single_row(tk_root):
+    """Existing v1 default rs/rd must still parse as a single row."""
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    got = panel.get_values()
+    assert got["rs"] == [[0.0, 0.0, 0.0]]
+    assert got["rd"] == [[35.0, 0.0, 0.0]]
