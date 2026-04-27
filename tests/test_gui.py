@@ -56,19 +56,19 @@ def test_parameter_panel_reads_and_writes_values(tk_root):
     assert defaults["type_str"] == "CW_SD_I"
     assert defaults["slice_axis"] in ("x", "y", "z")
     assert isinstance(defaults["rs"], list)
-    assert len(defaults["rs"]) == 3
+    assert len(defaults["rs"]) == 1  # single row
     assert isinstance(defaults["opt_prop"], dict)
     assert "musp" in defaults["opt_prop"]
 
     # Round-trip set_values → get_values
     new_vals = dict(defaults)
     new_vals["opt_prop"] = dict(defaults["opt_prop"], musp=1.2, mua=0.02)
-    new_vals["rs"] = [1.0, 2.0, 3.0]
+    new_vals["rs"] = [[1.0, 2.0, 3.0]]
     panel.set_values(new_vals)
     got = panel.get_values()
     assert got["opt_prop"]["musp"] == 1.2
     assert got["opt_prop"]["mua"] == 0.02
-    assert got["rs"] == [1.0, 2.0, 3.0]
+    assert got["rs"] == [[1.0, 2.0, 3.0]]
 
 
 def test_parameter_panel_pert_syncing(tk_root):
@@ -121,8 +121,8 @@ def test_main_window_constructs_and_recalculates(tk_root, tmp_path, monkeypatch,
     # Set the form to values that match the fixture
     values = {
         "type_str": "CW_SD_I",
-        "rs": [0.0, 0.0, 0.0],
-        "rd": [float(ref["rho"]), 0.0, 0.0],
+        "rs": [[0.0, 0.0, 0.0]],
+        "rd": [[float(ref["rho"]), 0.0, 0.0]],
         "opt_prop": {
             "n_in":  float(ref["nin"]),
             "n_out": float(ref["nout"]),
@@ -151,7 +151,7 @@ def test_session_persistence_round_trip(tk_root, tmp_path, monkeypatch):
     mw1 = MainWindow(master=tk_root)
     vals = mw1.params_panel.get_values()
     vals["opt_prop"]["musp"] = 1.7
-    vals["rs"] = [1.0, 2.0, 3.0]
+    vals["rs"] = [[1.0, 2.0, 3.0]]
     mw1.params_panel.set_values(vals)
     mw1.save_session()
 
@@ -159,7 +159,7 @@ def test_session_persistence_round_trip(tk_root, tmp_path, monkeypatch):
     mw2.load_session()
     got = mw2.params_panel.get_values()
     assert got["opt_prop"]["musp"] == 1.7
-    assert got["rs"] == [1.0, 2.0, 3.0]
+    assert got["rs"] == [[1.0, 2.0, 3.0]]
 
 
 def test_revert_restores_to_last_computed(tk_root, tmp_path, monkeypatch, cw_sd_i_ref):
@@ -169,8 +169,8 @@ def test_revert_restores_to_last_computed(tk_root, tmp_path, monkeypatch, cw_sd_
     mw = MainWindow(master=tk_root)
     values = {
         "type_str": "CW_SD_I",
-        "rs": [0.0, 0.0, 0.0],
-        "rd": [float(ref["rho"]), 0.0, 0.0],
+        "rs": [[0.0, 0.0, 0.0]],
+        "rd": [[float(ref["rho"]), 0.0, 0.0]],
         "opt_prop": {"n_in": 1.333, "n_out": 1.0, "musp": 1.1, "mua": 0.011},
         "xl": [-5.0, 40.0], "yl": [0.0, 0.0], "zl": [0.0, 20.0],
         "dr": 1.0, "pert": [1.0, 1.0, 1.0],
@@ -179,12 +179,12 @@ def test_revert_restores_to_last_computed(tk_root, tmp_path, monkeypatch, cw_sd_
     mw.params_panel.set_values(values)
     mw.recalculate()
     # Mutate an expensive field
-    dirty = dict(values); dirty["rs"] = [5.0, 5.0, 5.0]
+    dirty = dict(values); dirty["rs"] = [[5.0, 5.0, 5.0]]
     mw.params_panel.set_values(dirty)
     assert mw.is_dirty
     mw.revert()
     got = mw.params_panel.get_values()
-    assert got["rs"] == [0.0, 0.0, 0.0]
+    assert got["rs"] == [[0.0, 0.0, 0.0]]
     assert not mw.is_dirty
 
 
@@ -195,3 +195,204 @@ def test_main_smoke_constructs_and_exits(tmp_path, monkeypatch):
     from sensmaps.__main__ import main
     exit_code = main(argv=["--smoke-test"])
     assert exit_code == 0
+
+
+def test_parse_float_matrix_single_row():
+    from sensmaps.gui import _parse_float_matrix
+    assert _parse_float_matrix("0 0 0", 3) == [[0.0, 0.0, 0.0]]
+
+
+def test_parse_float_matrix_two_rows_semicolon():
+    from sensmaps.gui import _parse_float_matrix
+    assert _parse_float_matrix("0 0 0; 30 0 0", 3) == [[0.0, 0.0, 0.0], [30.0, 0.0, 0.0]]
+
+
+def test_parse_float_matrix_trailing_semicolon():
+    from sensmaps.gui import _parse_float_matrix
+    assert _parse_float_matrix("0 0 0;", 3) == [[0.0, 0.0, 0.0]]
+
+
+def test_parse_float_matrix_mixed_separators():
+    from sensmaps.gui import _parse_float_matrix
+    assert _parse_float_matrix("0,0,0; 30, 0, 0", 3) == [[0.0, 0.0, 0.0], [30.0, 0.0, 0.0]]
+
+
+def test_parse_float_matrix_rejects_wrong_column_count():
+    from sensmaps.gui import _parse_float_matrix
+    with pytest.raises(ValueError, match="expected 3"):
+        _parse_float_matrix("0 0", 3)
+
+
+def test_parse_float_matrix_rejects_empty_input():
+    from sensmaps.gui import _parse_float_matrix
+    with pytest.raises(ValueError, match="at least one row"):
+        _parse_float_matrix("", 3)
+    with pytest.raises(ValueError, match="at least one row"):
+        _parse_float_matrix(";", 3)
+
+
+def test_parameter_panel_round_trips_multi_row_rs(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    panel.set_values({
+        "rs": [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+        "rd": [[35.0, 0.0, 0.0]],
+    })
+    got = panel.get_values()
+    assert got["rs"] == [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]]
+    assert got["rd"] == [[35.0, 0.0, 0.0]]
+
+
+def test_parameter_panel_default_rs_is_single_row(tk_root):
+    """Existing v1 default rs/rd must still parse as a single row."""
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    got = panel.get_values()
+    assert got["rs"] == [[0.0, 0.0, 0.0]]
+    assert got["rd"] == [[35.0, 0.0, 0.0]]
+
+
+def test_parameter_panel_default_fmod(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    got = panel.get_values()
+    assert got["fmod"] == 100.0   # MHz, defaults from _DEFAULTS
+
+
+def test_fmod_field_disabled_for_cw(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    panel.set_values({"type_str": "CW_SD_I"})
+    assert str(panel._fmod_entry.cget("state")) == "disabled"
+
+
+def test_fmod_field_enabled_for_fd(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    panel.set_values({"type_str": "FD_SD_I"})
+    assert str(panel._fmod_entry.cget("state")) == "normal"
+
+
+def test_param_class_classifies_fmod_as_expensive(tk_root):
+    from sensmaps.gui import PARAM_CLASS
+    assert PARAM_CLASS["fmod"] == "expensive"
+
+
+def test_type_combobox_lists_v1_1_combos(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    # The combobox is the first widget in panel._inputs (built first in _build_widgets).
+    cb_type = panel._inputs[0]
+    expected = [
+        "CW_SD_I", "CW_SS_I", "CW_DS_I",
+        "FD_SD_I", "FD_SS_I", "FD_DS_I",
+        "FD_SD_P", "FD_SS_P", "FD_DS_P",
+    ]
+    assert list(cb_type.cget("values")) == expected
+
+
+def test_recalculate_passes_fmod_in_hz_for_fd(tk_root, tmp_path, monkeypatch, cw_sd_i_ref):
+    """When type is FD_*, MainWindow.recalculate must convert MHz → Hz at the boundary."""
+    monkeypatch.chdir(tmp_path)
+    from sensmaps.gui import MainWindow
+    import sensmaps.compute as compute_mod
+    captured = {}
+    real_make_s_full = compute_mod.make_s_full
+
+    def spy(*args, **kwargs):
+        captured.update(kwargs)
+        # Defer to a CW path so we don't need an FD fixture here:
+        kwargs["type_str"] = "CW_SD_I"
+        kwargs["fmod"] = None
+        return real_make_s_full(*args, **kwargs)
+
+    monkeypatch.setattr(compute_mod, "make_s_full", spy)
+    monkeypatch.setattr("sensmaps.gui.make_s_full", spy)
+
+    mw = MainWindow(master=tk_root)
+    mw.params_panel.set_values({"type_str": "FD_SD_I", "fmod": 100.0})
+    mw.recalculate()
+    assert captured["fmod"] == 100.0 * 1e6
+
+
+def test_old_v1_session_json_loads_into_v1_1(tk_root, tmp_path, monkeypatch):
+    """A session file produced by v1.0 (no `fmod`, single-row rs/rd as flat list)
+    must load without raising and produce sensible v1.1 defaults."""
+    import json
+    monkeypatch.chdir(tmp_path)
+    # Synthesize a v1.0-shaped session JSON.
+    v1_session = {
+        "type_str": "CW_SD_I",
+        "rs": [0.0, 0.0, 0.0],            # v1.0 used flat list-of-floats
+        "rd": [35.0, 0.0, 0.0],
+        "opt_prop": {"n_in": 1.333, "n_out": 1.0, "musp": 1.1, "mua": 0.011},
+        "xl": [-10.0, 70.0], "yl": [0.0, 0.0], "zl": [0.0, 25.0],
+        "dr": 1.0, "pert": [1.0, 1.0, 1.0], "pert_override": False,
+        "slice_axis": "y", "slice_value": 0.0, "quantiles": [0.05, 0.95],
+    }
+    (tmp_path / "last_session.json").write_text(json.dumps(v1_session))
+
+    from sensmaps.gui import MainWindow
+    mw = MainWindow(master=tk_root)
+    got = mw.params_panel.get_values()
+    # rs/rd silently ignored (set_values doesn't accept flat list), defaults retained:
+    assert got["rs"] == [[0.0, 0.0, 0.0]]
+    # fmod missing in JSON → uses _DEFAULTS:
+    assert got["fmod"] == 100.0
+    # Cache built from defaults — auto-recalc on launch works.
+    assert mw._cache is not None
+
+
+def test_main_window_recalculates_fd_sd_i(tk_root, tmp_path, monkeypatch, request):
+    monkeypatch.chdir(tmp_path)
+    ref = request.getfixturevalue("combo_ref_fd_sd_i")
+    from sensmaps.gui import MainWindow
+
+    mw = MainWindow(master=tk_root)
+    values = {
+        "type_str": "FD_SD_I",
+        "rs": [[float(ref["rs"][0, 0]), float(ref["rs"][0, 1]), float(ref["rs"][0, 2])]],
+        "rd": [[float(ref["rd"][0, 0]), float(ref["rd"][0, 1]), float(ref["rd"][0, 2])]],
+        "opt_prop": {
+            "n_in":  float(ref["nin"]),
+            "n_out": float(ref["nout"]),
+            "musp":  float(ref["musp"]),
+            "mua":   float(ref["mua"]),
+        },
+        "xl": [float(ref["xl"][0]), float(ref["xl"][1])],
+        "yl": [float(ref["yl"][0]), float(ref["yl"][1])],
+        "zl": [float(ref["zl"][0]), float(ref["zl"][1])],
+        "dr": float(ref["dr"]),
+        "fmod": float(ref["fmod_hz"]) / 1e6,         # GUI stores MHz
+        "pert": [float(p) for p in ref["pert"]],
+        "slice_axis": "y",
+        "slice_value": 0.0,
+        "quantiles": [0.05, 0.95],
+    }
+    mw.params_panel.set_values(values)
+    mw.recalculate()
+    assert mw._cache is not None
+    np.testing.assert_allclose(mw._cache.S, ref["S"], rtol=1e-8, atol=1e-12)
+
+
+def test_save_data_archive_includes_fmod(tk_root, tmp_path, monkeypatch):
+    """save_data must round-trip fmod (NaN for CW, exact Hz for FD)."""
+    monkeypatch.chdir(tmp_path)
+    from sensmaps.gui import MainWindow
+    mw = MainWindow(master=tk_root)
+    # Default state is CW_SD_I — fmod should serialize as NaN.
+    out = tmp_path / "cw.npz"
+    monkeypatch.setattr("tkinter.filedialog.asksaveasfilename", lambda **_: str(out))
+    mw.save_data()
+    arr = np.load(out)
+    assert "fmod" in arr.files
+    assert np.isnan(float(arr["fmod"]))
+
+    # Switch to FD and rerun — fmod should match the form value (in Hz).
+    mw.params_panel.set_values({"type_str": "FD_SD_I", "fmod": 100.0})
+    mw.recalculate()
+    out2 = tmp_path / "fd.npz"
+    monkeypatch.setattr("tkinter.filedialog.asksaveasfilename", lambda **_: str(out2))
+    mw.save_data()
+    arr2 = np.load(out2)
+    assert float(arr2["fmod"]) == 100.0 * 1e6

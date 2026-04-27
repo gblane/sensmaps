@@ -15,7 +15,7 @@ from sensmaps.compute import GridParams, make_s
 from sensmaps.physics import OpticalProperties
 from sensmaps.views import make_color_limits, slice_s
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "GridParams",

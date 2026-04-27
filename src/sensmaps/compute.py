@@ -9,10 +9,19 @@ laid out to make v2 additions a single-row change.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Sequence
+from dataclasses import dataclass, field
+from typing import Callable, Sequence
 
 import numpy as np
+from scipy.signal import fftconvolve
+
+from sensmaps.physics import (
+    OpticalProperties,
+    complex_part_path_len,
+    complex_tot_path_len,
+    continuous_part_path_len,
+    continuous_tot_path_len,
+)
 
 
 @dataclass
@@ -86,13 +95,101 @@ def parse_type_str(type_str: str) -> ParsedType:
     return ParsedType(temporal=temporal, arrangement=arrangement, data_type=data_type)
 
 
-from scipy.signal import fftconvolve
+def _expand_optodes(arrangement: str, rs, rd, z_offset: float):
+    """Expand (rs, rd) into per-measurement (rSrcs, rDets) pairs.
 
-from sensmaps.physics import (
-    OpticalProperties,
-    continuous_part_path_len,
-    continuous_tot_path_len,
-)
+    Mirrors MATLAB makeS.m lines 123-149. Applies the z-offset to
+    sources only. Validates optode counts against the arrangement.
+
+    Returns
+    -------
+    rSrcs : ndarray, shape (N_meas, 3)
+    rDets : ndarray, shape (N_meas, 3)
+    """
+    rs = np.atleast_2d(np.asarray(rs, dtype=np.float64))
+    rd = np.atleast_2d(np.asarray(rd, dtype=np.float64))
+    z_off = np.array([0.0, 0.0, z_offset])
+    if arrangement == "SD":
+        if rs.shape != (1, 3) or rd.shape != (1, 3):
+            raise ValueError(
+                f"Incorrect optode count for arrangement 'SD': "
+                f"rs.shape={rs.shape}, rd.shape={rd.shape}"
+            )
+        return rs + z_off, rd
+    if arrangement == "SS":
+        if rs.shape == (1, 3) and rd.shape == (2, 3):
+            return np.tile(rs, (2, 1)) + z_off, rd
+        if rs.shape == (2, 3) and rd.shape == (1, 3):
+            return rs + z_off, np.tile(rd, (2, 1))
+        raise ValueError(
+            f"Incorrect optode count for arrangement 'SS': "
+            f"rs.shape={rs.shape}, rd.shape={rd.shape}"
+        )
+    if arrangement == "DS":
+        if rs.shape != (2, 3) or rd.shape != (2, 3):
+            raise ValueError(
+                f"Incorrect optode count for arrangement 'DS': "
+                f"rs.shape={rs.shape}, rd.shape={rd.shape}"
+            )
+        rSrcs = np.vstack([rs[[0, 0], :], rs[[1, 1], :]])
+        rDets = np.vstack([rd, np.flipud(rd)])
+        return rSrcs + z_off, rDets
+    raise ValueError(f"Unknown arrangement {arrangement!r}")
+
+
+def _combine_sd(L, Y, ll):
+    """SD combinator: Svox = ll[0] / L[0]. Port of makeS.m line 400.
+
+    Y cancels for SD (single measurement), so it is not used.
+    """
+    return ll[0] / L[0]
+
+
+def _combine_ss(L, Y, ll):
+    """SS / SD_DIFF combinator. Port of makeS.m lines 401-403."""
+    return (Y[1] * ll[1] - Y[0] * ll[0]) / (Y[1] * L[1] - Y[0] * L[0])
+
+
+def _combine_ds(L, Y, ll):
+    """DS combinator (4 measurements). Port of makeS.m lines 404-408."""
+    num = (Y[1] * ll[1] - Y[0] * ll[0]) + (Y[3] * ll[3] - Y[2] * ll[2])
+    den = (Y[1] * L[1]  - Y[0] * L[0])  + (Y[3] * L[3]  - Y[2] * L[2])
+    return num / den
+
+
+_ARRANGEMENT_COMBINE = {"SD": _combine_sd, "SS": _combine_ss, "DS": _combine_ds}
+
+
+# Per-measurement physics callables, keyed on (temporal, data_type).
+# Each entry is (L_fn, ll_fn, Y_fn). All callables accept **kwargs to absorb
+# parameters they don't use (notably fmod), so additions in v1.2/v1.3 don't
+# require touching the v1.1 entries.
+#   L_fn(rs_i, rd_i, opt_prop, **kw)               -> float
+#   ll_fn(rs_i, r_all, rd_i, V, opt_prop, **kw)    -> ndarray, shape (N_voxels,)
+#   Y_fn(rs_i, rd_i, opt_prop, **kw)               -> float
+_PHYSICS_DISPATCH: dict[tuple[str, str], tuple[Callable, Callable, Callable]] = {
+    ("CW", "I"): (
+        lambda rs_i, rd_i, op, **_:
+            float(continuous_tot_path_len(rs_i, rd_i, op)[0][0]),
+        lambda rs_i, r_all, rd_i, V, op, **_:
+            continuous_part_path_len(rs_i, r_all, rd_i, V, op),
+        lambda *_a, **_kw: 1.0,
+    ),
+    ("FD", "I"): (
+        lambda rs_i, rd_i, op, fmod, **_:
+            float(complex_tot_path_len(rs_i, rd_i, 2.0 * np.pi * fmod, op)[0][0].real),
+        lambda rs_i, r_all, rd_i, V, op, fmod, **_:
+            complex_part_path_len(rs_i, r_all, rd_i, V, 2.0 * np.pi * fmod, op).real,
+        lambda *_a, **_kw: 1.0,
+    ),
+    ("FD", "P"): (
+        lambda rs_i, rd_i, op, fmod, **_:
+            float(complex_tot_path_len(rs_i, rd_i, 2.0 * np.pi * fmod, op)[0][0].imag),
+        lambda rs_i, r_all, rd_i, V, op, fmod, **_:
+            complex_part_path_len(rs_i, r_all, rd_i, V, 2.0 * np.pi * fmod, op).imag,
+        lambda *_a, **_kw: 1.0,
+    ),
+}
 
 
 def apply_pert_kernel(
@@ -108,8 +205,8 @@ def apply_pert_kernel(
 class SensitivityResult:
     """Return type of make_s_full.
 
-    Attributes
-    ----------
+    Attributes (v1.0)
+    -----------------
     S         : ndarray, shape (Nx, Ny, Nz) — sensitivity (pert-convolved)
     Svox      : ndarray, shape (Nx, Ny, Nz) — per-voxel pre-conv sensitivity
     params    : GridParams
@@ -117,6 +214,12 @@ class SensitivityResult:
     rs, rd    : source and detector coords actually used (post z-offset) [mm]
     opt_prop  : OpticalProperties
     pert, dr  : perturbation and voxel size used
+
+    New in v1.1 (kw-only)
+    ---------------------
+    Y_per_meas : ndarray, shape (N_meas,) — measured signal Y per measurement;
+                 1.0 for v1.1 combos, plumbed for v1.3's T/V.
+    fmod       : float | None — modulation frequency [Hz] for FD types; None for CW.
     """
 
     S: np.ndarray
@@ -128,6 +231,9 @@ class SensitivityResult:
     opt_prop: OpticalProperties
     pert: tuple[float, float, float]
     dr: float
+    # NEW in v1.1 — kw-only so existing positional construction keeps working:
+    Y_per_meas: np.ndarray = field(kw_only=True)
+    fmod: float | None = field(default=None, kw_only=True)
 
 
 def make_s_full(
@@ -141,6 +247,8 @@ def make_s_full(
     dr: float,
     pert: Sequence[float] = (1.0, 1.0, 1.0),
     sim_typ: str = "DT",
+    *,
+    fmod: float | None = None,
 ) -> SensitivityResult:
     """Compute sensitivity map for a measurement type. Mirror of MATLAB makeS.m.
 
@@ -154,11 +262,20 @@ def make_s_full(
         raise NotImplementedError(
             f"sim_typ={sim_typ!r} is not implemented in v1 (DT only)"
         )
-    if not (parsed.temporal == "CW" and parsed.arrangement == "SD"
-            and parsed.data_type == "I"):
-        raise NotImplementedError(
-            f"type_str={type_str!r} is not implemented in v1 (only CW_SD_I)"
+
+    if parsed.temporal == "FD" and fmod is None:
+        raise ValueError(
+            f"fmod is required for FD_* types (got fmod=None for {type_str!r})"
         )
+
+    key = (parsed.temporal, parsed.data_type)
+    if key not in _PHYSICS_DISPATCH:
+        raise NotImplementedError(
+            f"type_str={type_str!r} is not implemented in v1.1 "
+            f"(no dispatch entry for {key})"
+        )
+    L_fn, ll_fn, Y_fn = _PHYSICS_DISPATCH[key]
+
     # `pert % dr == 0` looks right but is a float-arithmetic trap
     # (1.0 % 0.1 == 0.09999...). Compare against the nearest integer multiple
     # of dr instead, with a small relative tolerance.
@@ -168,40 +285,43 @@ def make_s_full(
 
     params = GridParams.from_limits(xl=xl, yl=yl, zl=zl, dr=dr, pert=pert)
 
-    # z-offset the source by 1/musp (DT convention)
-    rs = np.atleast_2d(np.asarray(rs, dtype=np.float64))
-    rd = np.atleast_2d(np.asarray(rd, dtype=np.float64))
+    # Optode expansion + z-offset (handled in _expand_optodes).
+    rs_arr = np.atleast_2d(np.asarray(rs, dtype=np.float64))
+    rd_arr = np.atleast_2d(np.asarray(rd, dtype=np.float64))
     z_offset = 1.0 / opt_prop.musp
-    rs_used = rs + np.array([[0, 0, z_offset]])
+    rSrcs, rDets = _expand_optodes(parsed.arrangement, rs_arr, rd_arr, z_offset)
+    n_meas = rSrcs.shape[0]
 
-    # Build voxel-center coordinate matrix (Nx, Ny, Nz, 3)
+    # Voxel-center coordinate matrix (Nx, Ny, Nz, 3).
     XX, YY, ZZ = np.meshgrid(params.x, params.y, params.z, indexing="ij")
     r_all = np.column_stack([XX.ravel(), YY.ravel(), ZZ.ravel()])
-
-    # Total path length (scalar for SD)
-    L, _ = continuous_tot_path_len(rs_used, rd, opt_prop)
-    L_scalar = float(L[0])
-
-    # Partial path length per voxel. The diffusion-theory kernel diverges at
-    # r1=0 (voxel coincident with source), producing NaN there — handled by
-    # nan_to_num below; the resulting RuntimeWarnings are not informative.
-    with np.errstate(divide="ignore", invalid="ignore"):
-        l_vec = continuous_part_path_len(rs_used, r_all, rd, dr ** 3, opt_prop)
-    
-    # Values with z < 0 should not be calculated (set to 0)
     z_coords = r_all[:, 2]
-    l_vec[z_coords < 0] = 0.0
 
-    l_vec = np.nan_to_num(l_vec, nan=0.0)
-    ll = l_vec.reshape(XX.shape)
+    # Per-measurement physics.
+    Ls: list[float] = []
+    Ys: list[float] = []
+    lls: list[np.ndarray] = []
+    for i in range(n_meas):
+        rs_i = rSrcs[[i], :]
+        rd_i = rDets[[i], :]
+        Ls.append(L_fn(rs_i, rd_i, opt_prop, fmod=fmod))
+        Ys.append(Y_fn(rs_i, rd_i, opt_prop, fmod=fmod))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            l_vec = ll_fn(rs_i, r_all, rd_i, dr ** 3, opt_prop, fmod=fmod)
+        l_vec[z_coords < 0] = 0.0
+        l_vec = np.nan_to_num(l_vec, nan=0.0)
+        lls.append(l_vec.reshape(XX.shape))
 
-    Svox = ll / L_scalar
+    # Arrangement combinator.
+    Svox = _ARRANGEMENT_COMBINE[parsed.arrangement](Ls, Ys, lls)
 
     S = apply_pert_kernel(Svox, pert, dr)
 
     return SensitivityResult(
         S=S, Svox=Svox, params=params, type_str=type_str,
-        rs=rs_used, rd=rd, opt_prop=opt_prop, pert=tuple(pert), dr=dr,
+        rs=rSrcs, rd=rDets, opt_prop=opt_prop, pert=tuple(pert), dr=dr,
+        Y_per_meas=np.asarray(Ys, dtype=np.float64),
+        fmod=fmod,
     )
 
 
@@ -216,10 +336,13 @@ def make_s(
     dr: float,
     pert: Sequence[float] = (1.0, 1.0, 1.0),
     sim_typ: str = "DT",
+    *,
+    fmod: float | None = None,
 ):
     """Thin variant returning only `(S, params)`. See `make_s_full` for details."""
     result = make_s_full(
         type_str=type_str, rs=rs, rd=rd, opt_prop=opt_prop,
         xl=xl, yl=yl, zl=zl, dr=dr, pert=pert, sim_typ=sim_typ,
+        fmod=fmod,
     )
     return result.S, result.params

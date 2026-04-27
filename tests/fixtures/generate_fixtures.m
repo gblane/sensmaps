@@ -77,6 +77,60 @@ save(fullfile(here, 'cw_sd_i_example1.mat'), ...
     'r_test', 'phi_test_cw', 'R_test_cw', 'L_test_cw', 'l_test_cw', ...
     'x', 'y', 'z', 'Svox', 'S');
 
+%% v1.1 fixtures — 8 new combos
+% Common inputs (same grid as cw_sd_i_example1)
+combos_xl   = [-5, 40];
+combos_yl   = [0, 0];
+combos_zl   = [0, 20];
+combos_dr   = 1.0;
+combos_pert = [1, 1, 1];
+combos_fmod = 100e6;   % Hz (matches GUI default of 100 MHz)
+
+% Optode geometries per arrangement
+sd_rs = [0, 0, 0];           sd_rd = [25, 0, 0];
+ss_rs = [0, 0, 0];           ss_rd = [20, 0, 0; 30, 0, 0];   % 1×2 form
+ds_rs = [0, 0, 0; 5, 0, 0]; ds_rd = [25, 0, 0; 30, 0, 0];
+
+combo_specs = {
+    'cw_ss_i', 'CW_SS_I', ss_rs, ss_rd, NaN;
+    'cw_ds_i', 'CW_DS_I', ds_rs, ds_rd, NaN;
+    'fd_sd_i', 'FD_SD_I', sd_rs, sd_rd, combos_fmod;
+    'fd_sd_p', 'FD_SD_P', sd_rs, sd_rd, combos_fmod;
+    'fd_ss_i', 'FD_SS_I', ss_rs, ss_rd, combos_fmod;
+    'fd_ss_p', 'FD_SS_P', ss_rs, ss_rd, combos_fmod;
+    'fd_ds_i', 'FD_DS_I', ds_rs, ds_rd, combos_fmod;
+    'fd_ds_p', 'FD_DS_P', ds_rs, ds_rd, combos_fmod;
+};
+
+for k = 1:size(combo_specs, 1)
+    name      = combo_specs{k, 1};
+    type_str  = combo_specs{k, 2};
+    rs        = combo_specs{k, 3};
+    rd        = combo_specs{k, 4};
+    fmod_hz   = combo_specs{k, 5};
+
+    if isnan(fmod_hz)
+        [S, params, Svox] = makeS(type_str, rs, rd, opt_prop, ...
+            'xl', combos_xl, 'yl', combos_yl, 'zl', combos_zl, ...
+            'dr', combos_dr, 'pert', combos_pert);
+    else
+        [S, params, Svox] = makeS(type_str, rs, rd, opt_prop, ...
+            'xl', combos_xl, 'yl', combos_yl, 'zl', combos_zl, ...
+            'dr', combos_dr, 'pert', combos_pert, 'fmod', fmod_hz);
+    end
+
+    x = params.x; y = params.y; z = params.z;
+    xl = combos_xl; yl = combos_yl; zl = combos_zl;
+    dr = combos_dr; pert = combos_pert;
+
+    save(fullfile(here, [name, '.mat']), ...
+        'nin', 'nout', 'musp', 'mua', ...
+        'dr', 'pert', 'xl', 'yl', 'zl', ...
+        'rs', 'rd', 'fmod_hz', ...
+        'x', 'y', 'z', 'Svox', 'S', 'type_str');
+    fprintf('Wrote %s.mat\n', name);
+end
+
 rmpath(deps);
 
 fprintf('Wrote %s\n', fullfile(here, 'cw_sd_i_example1.mat'));

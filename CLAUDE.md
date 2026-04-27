@@ -60,6 +60,10 @@ physics.py   →   compute.py   →   views.py   →   gui.py   →   __main__.p
   The `(temporal, data_type) → (L, Y, ll)` dispatch structure is intentionally laid out for v2
   to add entries without restructuring. `Svox` is cached so the GUI can re-convolve with a
   new perturbation kernel without redoing the diffusion-theory pass.
+- v1.1 introduces `_PHYSICS_DISPATCH[(temporal, data_type)] -> (L_fn, ll_fn, Y_fn)`
+  and `_ARRANGEMENT_COMBINE[arrangement]`. Adding a new combo is one row in
+  each table plus, if needed, a new physics function. `_expand_optodes`
+  validates optode counts against the arrangement and applies the z-offset.
 
 - **`views.py`** — pure matplotlib, no Tkinter. `slice_s` (port of MATLAB `sliceS.m`) returns
   a 2D plane plus a `PlotParams` dataclass holding axis vectors and LaTeX labels. `make_color_limits`
@@ -76,6 +80,10 @@ physics.py   →   compute.py   →   views.py   →   gui.py   →   __main__.p
   `Svox` with a new kernel for `pert` changes — no physics recompute. Expensive changes set
   the dirty flag; `revert()` restores the form to the inputs that produced the current plot.
   Session state persists to `./last_session.json` on close.
+- `fmod` lives in **MHz** at the GUI boundary and **Hz** internally;
+  conversion happens in `MainWindow.recalculate`. The `_fmod_entry` is
+  state-driven by `type_str` (disabled when CW). Multi-row `rs`/`rd` use
+  `_parse_float_matrix` which splits on `;`.
 
 - **`__main__.py`** — argparse + Tk mainloop. `--smoke-test` flag is used by the test suite.
 

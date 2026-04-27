@@ -60,6 +60,7 @@ PARAM_CLASS: dict[str, str] = {
     "yl": "expensive",
     "zl": "expensive",
     "dr": "expensive",
+    "fmod": "expensive",                  # NEW
     "pert": "cheap",
     "pert_override": "cheap",
     "slice_axis": "cheap",
@@ -70,8 +71,8 @@ PARAM_CLASS: dict[str, str] = {
 
 _DEFAULTS: dict[str, Any] = {
     "type_str": "CW_SD_I",
-    "rs": [0.0, 0.0, 0.0],
-    "rd": [35.0, 0.0, 0.0],
+    "rs": [[0.0, 0.0, 0.0]],
+    "rd": [[35.0, 0.0, 0.0]],
     "opt_prop": {
         "n_in": 1.333, "n_out": 1.0, "musp": 1.1, "mua": 0.011,
     },
@@ -79,6 +80,7 @@ _DEFAULTS: dict[str, Any] = {
     "yl": [0.0, 0.0],
     "zl": [0.0, 25.0],
     "dr": 1.0,
+    "fmod": 100.0,                  # NEW — MHz
     "pert": [1.0, 1.0, 1.0],
     "pert_override": False,
     "slice_axis": "y",
@@ -93,6 +95,18 @@ def _parse_float_list(text: str, n: int) -> list[float]:
     if len(parts) != n:
         raise ValueError(f"expected {n} values, got {len(parts)}: {text!r}")
     return [float(p) for p in parts]
+
+
+def _parse_float_matrix(text: str, ncols: int) -> list[list[float]]:
+    """Parse a `;`-separated list of `ncols`-wide float rows.
+
+    Each row is then whitespace/comma-separated. Trailing `;` is ignored.
+    Empty input (or only `;`) raises ValueError.
+    """
+    rows = [r for r in text.split(";") if r.strip()]
+    if not rows:
+        raise ValueError(f"expected at least one row of {ncols} values; got {text!r}")
+    return [_parse_float_list(r, ncols) for r in rows]
 
 
 class ParameterPanel:
@@ -133,23 +147,28 @@ class ParameterPanel:
         row = 0
 
         # Type
+        _VALID_TYPES = [
+            "CW_SD_I", "CW_SS_I", "CW_DS_I",
+            "FD_SD_I", "FD_SS_I", "FD_DS_I",
+            "FD_SD_P", "FD_SS_P", "FD_DS_P",
+        ]
         ttk.Label(f, text="Type").grid(row=row, column=0, sticky="w")
         self._vars["type_str"] = tk.StringVar(value="CW_SD_I")
         cb_type = ttk.Combobox(f, textvariable=self._vars["type_str"],
-                               values=["CW_SD_I"], state="readonly", width=12)
+                               values=_VALID_TYPES, state="readonly", width=12)
         cb_type.grid(row=row, column=1, sticky="ew")
         self._inputs.append(cb_type)
         row += 1
 
         # Optodes
-        ttk.Label(f, text="rs [x y z] (mm)").grid(row=row, column=0, sticky="w")
+        ttk.Label(f, text="rs [x y z; ...] (mm)").grid(row=row, column=0, sticky="w")
         self._vars["rs"] = tk.StringVar()
         en_rs = ttk.Entry(f, textvariable=self._vars["rs"], width=20)
         en_rs.grid(row=row, column=1, sticky="ew")
         self._inputs.append(en_rs)
         row += 1
 
-        ttk.Label(f, text="rd [x y z] (mm)").grid(row=row, column=0, sticky="w")
+        ttk.Label(f, text="rd [x y z; ...] (mm)").grid(row=row, column=0, sticky="w")
         self._vars["rd"] = tk.StringVar()
         en_rd = ttk.Entry(f, textvariable=self._vars["rd"], width=20)
         en_rd.grid(row=row, column=1, sticky="ew")
@@ -181,6 +200,14 @@ class ParameterPanel:
         en_dr = ttk.Entry(f, textvariable=self._vars["dr"], width=8)
         en_dr.grid(row=row, column=1, sticky="w")
         self._inputs.append(en_dr)
+        row += 1
+
+        # Modulation frequency (FD only — disabled when type is CW_*)
+        ttk.Label(f, text="fmod (MHz)").grid(row=row, column=0, sticky="w")
+        self._vars["fmod"] = tk.StringVar()
+        self._fmod_entry = ttk.Entry(f, textvariable=self._vars["fmod"], width=10)
+        self._fmod_entry.grid(row=row, column=1, sticky="w")
+        self._inputs.append(self._fmod_entry)
         row += 1
 
         # Perturbation
@@ -244,6 +271,12 @@ class ParameterPanel:
         else:
             self._pert_entry.config(state="normal")
 
+        # Disable fmod entry when the selected type is CW_* (it's unused there).
+        if values["type_str"].startswith("FD_"):
+            self._fmod_entry.config(state="normal")
+        else:
+            self._fmod_entry.config(state="disabled")
+
         if name.startswith("opt_prop."):
             self._notify("opt_prop", values["opt_prop"])
         else:
@@ -253,8 +286,8 @@ class ParameterPanel:
         v = self._vars
         return {
             "type_str": v["type_str"].get(),
-            "rs": _parse_float_list(v["rs"].get(), 3),
-            "rd": _parse_float_list(v["rd"].get(), 3),
+            "rs": _parse_float_matrix(v["rs"].get(), 3),
+            "rd": _parse_float_matrix(v["rd"].get(), 3),
             "opt_prop": {
                 "n_in":  float(v["opt_prop.n_in"].get()),
                 "n_out": float(v["opt_prop.n_out"].get()),
@@ -265,6 +298,7 @@ class ParameterPanel:
             "yl": _parse_float_list(v["yl"].get(), 2),
             "zl": _parse_float_list(v["zl"].get(), 2),
             "dr": float(v["dr"].get()),
+            "fmod": float(v["fmod"].get()),
             "pert": _parse_float_list(v["pert"].get(), 3),
             "pert_override": bool(v["pert_override"].get()),
             "slice_axis": v["slice_axis"].get(),
@@ -276,7 +310,8 @@ class ParameterPanel:
     _VALID_OPT_PROP_KEYS = frozenset(("n_in", "n_out", "musp", "mua"))
 
     def set_values(self, values: dict[str, Any]) -> None:
-        def _fmt_list(xs): return " ".join(f"{x:g}" for x in xs)
+        def _fmt_list(xs):    return " ".join(f"{x:g}" for x in xs)
+        def _fmt_matrix(xss): return "; ".join(_fmt_list(xs) for xs in xss)
 
         unknown = set(values) - self._VALID_KEYS
         if unknown:
@@ -295,9 +330,9 @@ class ParameterPanel:
         if "type_str" in values:
             self._vars["type_str"].set(values["type_str"])
         if "rs" in values:
-            self._vars["rs"].set(_fmt_list(values["rs"]))
+            self._vars["rs"].set(_fmt_matrix(values["rs"]))
         if "rd" in values:
-            self._vars["rd"].set(_fmt_list(values["rd"]))
+            self._vars["rd"].set(_fmt_matrix(values["rd"]))
         if "opt_prop" in values:
             op = values["opt_prop"]
             for k in ("n_in", "n_out", "musp", "mua"):
@@ -311,6 +346,8 @@ class ParameterPanel:
             self._vars["zl"].set(_fmt_list(values["zl"]))
         if "dr" in values:
             self._vars["dr"].set(f"{values['dr']:g}")
+        if "fmod" in values:
+            self._vars["fmod"].set(f"{values['fmod']:g}")
         if "pert_override" in values:
             self._vars["pert_override"].set(values["pert_override"])
         if "pert" in values:
@@ -460,16 +497,22 @@ class MainWindow:
             return
         try:
             op = _opt_prop_from_dict(values["opt_prop"])
+            fmod_hz = (
+                values["fmod"] * 1e6
+                if values["type_str"].startswith("FD_")
+                else None
+            )
             result = make_s_full(
                 type_str=values["type_str"],
-                rs=np.array([values["rs"]]),
-                rd=np.array([values["rd"]]),
+                rs=np.asarray(values["rs"], dtype=float),
+                rd=np.asarray(values["rd"], dtype=float),
                 opt_prop=op,
                 xl=tuple(values["xl"]),
                 yl=tuple(values["yl"]),
                 zl=tuple(values["zl"]),
                 dr=values["dr"],
                 pert=tuple(values["pert"]),
+                fmod=fmod_hz,
             )
         except (ValueError, NotImplementedError) as e:
             messagebox.showerror("Recalculate failed", str(e))
@@ -532,6 +575,7 @@ class MainWindow:
                 type_str=c.type_str,
                 n_in=c.opt_prop.n_in, n_out=c.opt_prop.n_out,
                 musp=c.opt_prop.musp, mua=c.opt_prop.mua,
+                fmod=(np.nan if c.fmod is None else c.fmod),    # NEW
                 sensmaps_version=version,
             )
         except Exception as e:
