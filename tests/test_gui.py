@@ -195,3 +195,37 @@ def test_main_smoke_constructs_and_exits(tmp_path, monkeypatch):
     from sensmaps.__main__ import main
     exit_code = main(argv=["--smoke-test"])
     assert exit_code == 0
+
+
+def test_parse_float_matrix_single_row():
+    from sensmaps.gui import _parse_float_matrix
+    assert _parse_float_matrix("0 0 0", 3) == [[0.0, 0.0, 0.0]]
+
+
+def test_parse_float_matrix_two_rows_semicolon():
+    from sensmaps.gui import _parse_float_matrix
+    assert _parse_float_matrix("0 0 0; 30 0 0", 3) == [[0.0, 0.0, 0.0], [30.0, 0.0, 0.0]]
+
+
+def test_parse_float_matrix_trailing_semicolon():
+    from sensmaps.gui import _parse_float_matrix
+    assert _parse_float_matrix("0 0 0;", 3) == [[0.0, 0.0, 0.0]]
+
+
+def test_parse_float_matrix_mixed_separators():
+    from sensmaps.gui import _parse_float_matrix
+    assert _parse_float_matrix("0,0,0; 30, 0, 0", 3) == [[0.0, 0.0, 0.0], [30.0, 0.0, 0.0]]
+
+
+def test_parse_float_matrix_rejects_wrong_column_count():
+    from sensmaps.gui import _parse_float_matrix
+    with pytest.raises(ValueError, match="expected 3"):
+        _parse_float_matrix("0 0", 3)
+
+
+def test_parse_float_matrix_rejects_empty_input():
+    from sensmaps.gui import _parse_float_matrix
+    with pytest.raises(ValueError, match="at least one row"):
+        _parse_float_matrix("", 3)
+    with pytest.raises(ValueError, match="at least one row"):
+        _parse_float_matrix(";", 3)

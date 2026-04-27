@@ -95,6 +95,18 @@ def _parse_float_list(text: str, n: int) -> list[float]:
     return [float(p) for p in parts]
 
 
+def _parse_float_matrix(text: str, ncols: int) -> list[list[float]]:
+    """Parse a `;`-separated list of `ncols`-wide float rows.
+
+    Each row is then whitespace/comma-separated. Trailing `;` is ignored.
+    Empty input (or only `;`) raises ValueError.
+    """
+    rows = [r for r in text.split(";") if r.strip()]
+    if not rows:
+        raise ValueError(f"expected at least one row of {ncols} values; got {text!r}")
+    return [_parse_float_list(r, ncols) for r in rows]
+
+
 class ParameterPanel:
     """Form panel with entries for every input parameter.
 
