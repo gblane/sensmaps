@@ -125,7 +125,7 @@ def test_expand_optodes_rejects_bad_shapes():
 def test_make_s_rejects_unsupported_type():
     from sensmaps.compute import make_s
     from sensmaps.physics import OpticalProperties
-    with pytest.raises(NotImplementedError, match="not implemented"):
+    with pytest.raises(NotImplementedError, match="no dispatch entry"):
         make_s(
             type_str="FD_SS_P",
             rs=np.array([[0, 0, 0]]),
