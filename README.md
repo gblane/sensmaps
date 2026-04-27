@@ -12,7 +12,10 @@ This is the Python companion to the MATLAB [`SensitivityCompendium`](https://git
 
 ## Status
 
-v1 — CW single-distance intensity (`CW_SD_I`) under diffusion theory. Tkinter GUI, save PNG/PDF + `.npz`. More measurement types in v2; Monte Carlo backend in v3.
+v1.1 — CW (`SD`/`SS`/`DS` × `I`) and FD (`SD`/`SS`/`DS` × `I`/`P`) under
+diffusion theory. Tkinter GUI, save PNG/PDF + `.npz`, multi-row optode
+entry, modulation frequency control. Time-domain types in v1.2/v1.3;
+Monte Carlo backend in v3.
 
 ## Install
 
@@ -53,16 +56,21 @@ sensmaps
 
 ## Using the GUI
 
-| Control             | Class      | What it does                                 |
-|---------------------|------------|----------------------------------------------|
-| Type                | expensive  | Measurement type (v1: `CW_SD_I`)             |
-| rs, rd              | expensive  | Source / detector coordinates [mm]           |
-| n_in, n_out         | expensive  | Index of refraction inside / outside         |
-| musp, mua           | expensive  | Reduced scattering / absorption [1/mm]       |
-| xl, yl, zl, dr      | expensive  | Voxel-grid limits and resolution [mm]        |
-| pert                | cheap      | Perturbation box size [mm]                   |
-| slice axis, value   | cheap      | Which 2D slice to display                    |
-| quantiles           | cheap      | Color-limit quantiles (lo, hi)               |
+| Control                  | Class      | What it does                                       |
+|--------------------------|------------|----------------------------------------------------|
+| Type                     | expensive  | Measurement type (v1.1: 9 CW + FD combos)          |
+| rs, rd                   | expensive  | Source / detector coordinates [mm]; multi-row via `;` |
+| n_in, n_out              | expensive  | Index of refraction inside / outside               |
+| musp, mua                | expensive  | Reduced scattering / absorption [1/mm]             |
+| xl, yl, zl, dr           | expensive  | Voxel-grid limits and resolution [mm]              |
+| fmod                     | expensive  | Modulation frequency [MHz]; greyed out unless type is `FD_*` |
+| pert                     | cheap      | Perturbation box size [mm]                         |
+| slice axis, value        | cheap      | Which 2D slice to display                          |
+| quantiles                | cheap      | Color-limit quantiles (lo, hi)                     |
+
+**Multi-optode formats:** `SS` accepts `(1 src, 2 dets)` *or* `(2 srcs, 1 det)`;
+`DS` requires `(2 srcs, 2 dets)`. Enter additional rows separated by `;` —
+e.g. `0 0 0; 30 0 0` for two sources.
 
 - **cheap** params redraw the plot live.
 - **expensive** params mark the form dirty; click **Recalculate** to rerun the physics.
