@@ -289,3 +289,27 @@ def test_type_combobox_lists_v1_1_combos(tk_root):
         "FD_SD_P", "FD_SS_P", "FD_DS_P",
     ]
     assert list(cb_type.cget("values")) == expected
+
+
+def test_recalculate_passes_fmod_in_hz_for_fd(tk_root, tmp_path, monkeypatch, cw_sd_i_ref):
+    """When type is FD_*, MainWindow.recalculate must convert MHz → Hz at the boundary."""
+    monkeypatch.chdir(tmp_path)
+    from sensmaps.gui import MainWindow
+    import sensmaps.compute as compute_mod
+    captured = {}
+    real_make_s_full = compute_mod.make_s_full
+
+    def spy(*args, **kwargs):
+        captured.update(kwargs)
+        # Defer to a CW path so we don't need an FD fixture here:
+        kwargs["type_str"] = "CW_SD_I"
+        kwargs["fmod"] = None
+        return real_make_s_full(*args, **kwargs)
+
+    monkeypatch.setattr(compute_mod, "make_s_full", spy)
+    monkeypatch.setattr("sensmaps.gui.make_s_full", spy)
+
+    mw = MainWindow(master=tk_root)
+    mw.params_panel.set_values({"type_str": "FD_SD_I", "fmod": 100.0})
+    mw.recalculate()
+    assert captured["fmod"] == 100.0 * 1e6

@@ -497,6 +497,11 @@ class MainWindow:
             return
         try:
             op = _opt_prop_from_dict(values["opt_prop"])
+            fmod_hz = (
+                values["fmod"] * 1e6
+                if values["type_str"].startswith("FD_")
+                else None
+            )
             result = make_s_full(
                 type_str=values["type_str"],
                 rs=np.asarray(values["rs"], dtype=float),
@@ -507,6 +512,7 @@ class MainWindow:
                 zl=tuple(values["zl"]),
                 dr=values["dr"],
                 pert=tuple(values["pert"]),
+                fmod=fmod_hz,
             )
         except (ValueError, NotImplementedError) as e:
             messagebox.showerror("Recalculate failed", str(e))
