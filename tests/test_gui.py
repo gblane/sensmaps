@@ -313,3 +313,31 @@ def test_recalculate_passes_fmod_in_hz_for_fd(tk_root, tmp_path, monkeypatch, cw
     mw.params_panel.set_values({"type_str": "FD_SD_I", "fmod": 100.0})
     mw.recalculate()
     assert captured["fmod"] == 100.0 * 1e6
+
+
+def test_old_v1_session_json_loads_into_v1_1(tk_root, tmp_path, monkeypatch):
+    """A session file produced by v1.0 (no `fmod`, single-row rs/rd as flat list)
+    must load without raising and produce sensible v1.1 defaults."""
+    import json
+    monkeypatch.chdir(tmp_path)
+    # Synthesize a v1.0-shaped session JSON.
+    v1_session = {
+        "type_str": "CW_SD_I",
+        "rs": [0.0, 0.0, 0.0],            # v1.0 used flat list-of-floats
+        "rd": [35.0, 0.0, 0.0],
+        "opt_prop": {"n_in": 1.333, "n_out": 1.0, "musp": 1.1, "mua": 0.011},
+        "xl": [-10.0, 70.0], "yl": [0.0, 0.0], "zl": [0.0, 25.0],
+        "dr": 1.0, "pert": [1.0, 1.0, 1.0], "pert_override": False,
+        "slice_axis": "y", "slice_value": 0.0, "quantiles": [0.05, 0.95],
+    }
+    (tmp_path / "last_session.json").write_text(json.dumps(v1_session))
+
+    from sensmaps.gui import MainWindow
+    mw = MainWindow(master=tk_root)
+    got = mw.params_panel.get_values()
+    # rs/rd silently ignored (set_values doesn't accept flat list), defaults retained:
+    assert got["rs"] == [[0.0, 0.0, 0.0]]
+    # fmod missing in JSON → uses _DEFAULTS:
+    assert got["fmod"] == 100.0
+    # Cache built from defaults — auto-recalc on launch works.
+    assert mw._cache is not None
