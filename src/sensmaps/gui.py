@@ -79,6 +79,7 @@ _DEFAULTS: dict[str, Any] = {
     "yl": [0.0, 0.0],
     "zl": [0.0, 25.0],
     "dr": 1.0,
+    "fmod": 100.0,                  # NEW — MHz
     "pert": [1.0, 1.0, 1.0],
     "pert_override": False,
     "slice_axis": "y",
@@ -195,6 +196,14 @@ class ParameterPanel:
         self._inputs.append(en_dr)
         row += 1
 
+        # Modulation frequency (FD only — disabled when type is CW_*)
+        ttk.Label(f, text="fmod (MHz)").grid(row=row, column=0, sticky="w")
+        self._vars["fmod"] = tk.StringVar()
+        self._fmod_entry = ttk.Entry(f, textvariable=self._vars["fmod"], width=10)
+        self._fmod_entry.grid(row=row, column=1, sticky="w")
+        self._inputs.append(self._fmod_entry)
+        row += 1
+
         # Perturbation
         ttk.Label(f, text="pert [x y z] (mm)").grid(row=row, column=0, sticky="w")
         pert_frame = ttk.Frame(f)
@@ -256,6 +265,12 @@ class ParameterPanel:
         else:
             self._pert_entry.config(state="normal")
 
+        # Disable fmod entry when the selected type is CW_* (it's unused there).
+        if values["type_str"].startswith("FD_"):
+            self._fmod_entry.config(state="normal")
+        else:
+            self._fmod_entry.config(state="disabled")
+
         if name.startswith("opt_prop."):
             self._notify("opt_prop", values["opt_prop"])
         else:
@@ -277,6 +292,7 @@ class ParameterPanel:
             "yl": _parse_float_list(v["yl"].get(), 2),
             "zl": _parse_float_list(v["zl"].get(), 2),
             "dr": float(v["dr"].get()),
+            "fmod": float(v["fmod"].get()),
             "pert": _parse_float_list(v["pert"].get(), 3),
             "pert_override": bool(v["pert_override"].get()),
             "slice_axis": v["slice_axis"].get(),
@@ -324,6 +340,8 @@ class ParameterPanel:
             self._vars["zl"].set(_fmt_list(values["zl"]))
         if "dr" in values:
             self._vars["dr"].set(f"{values['dr']:g}")
+        if "fmod" in values:
+            self._vars["fmod"].set(f"{values['fmod']:g}")
         if "pert_override" in values:
             self._vars["pert_override"].set(values["pert_override"])
         if "pert" in values:

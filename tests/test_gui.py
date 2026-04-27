@@ -250,3 +250,24 @@ def test_parameter_panel_default_rs_is_single_row(tk_root):
     got = panel.get_values()
     assert got["rs"] == [[0.0, 0.0, 0.0]]
     assert got["rd"] == [[35.0, 0.0, 0.0]]
+
+
+def test_parameter_panel_default_fmod(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    got = panel.get_values()
+    assert got["fmod"] == 100.0   # MHz, defaults from _DEFAULTS
+
+
+def test_fmod_field_disabled_for_cw(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    panel.set_values({"type_str": "CW_SD_I"})
+    assert str(panel._fmod_entry.cget("state")) == "disabled"
+
+
+def test_fmod_field_enabled_for_fd(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    panel.set_values({"type_str": "FD_SD_I"})
+    assert str(panel._fmod_entry.cget("state")) == "normal"
