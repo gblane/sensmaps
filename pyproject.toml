@@ -1,6 +1,6 @@
 [project]
 name = "sensmaps"
-version = "1.2.0"
+version = "1.2.1"
 description = "Interactive GUI for 2D sensitivity maps in diffuse optical imaging"
 readme = "README.md"
 requires-python = ">=3.11"
