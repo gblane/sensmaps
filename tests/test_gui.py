@@ -287,6 +287,7 @@ def test_type_combobox_lists_v1_1_combos(tk_root):
         "CW_SD_I", "CW_SS_I", "CW_DS_I",
         "FD_SD_I", "FD_SS_I", "FD_DS_I",
         "FD_SD_P", "FD_SS_P", "FD_DS_P",
+        "TD_SD_GI", "TD_SS_GI", "TD_DS_GI",
     ]
     assert list(cb_type.cget("values")) == expected
 
@@ -396,3 +397,57 @@ def test_save_data_archive_includes_fmod(tk_root, tmp_path, monkeypatch):
     mw.save_data()
     arr2 = np.load(out2)
     assert float(arr2["fmod"]) == 100.0 * 1e6
+
+
+def test_td_override_disables_tend_and_ndt_when_unchecked(tk_root):
+    """When type is TD_*_GI but override is off, tend/ndt entries must be disabled."""
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+    panel.set_values({"type_str": "TD_SD_GI", "td_override": False})
+    panel._on_var_changed("type_str")
+    assert str(panel._tg_entry.cget("state")) == "normal"
+    assert str(panel._tend_entry.cget("state")) == "disabled"
+    assert str(panel._ndt_entry.cget("state")) == "disabled"
+
+    panel.set_values({"td_override": True})
+    panel._on_var_changed("td_override")
+    assert str(panel._tend_entry.cget("state")) == "normal"
+    assert str(panel._ndt_entry.cget("state")) == "normal"
+
+
+def test_recalculate_passes_tg_in_ps_for_td(tk_root, tmp_path, monkeypatch):
+    """For TD_* types, recalculate must convert ns → ps and pass tg/tend/ndt."""
+    monkeypatch.chdir(tmp_path)
+    from sensmaps.gui import MainWindow
+    import sensmaps.compute as compute_mod
+
+    captured = {}
+    real_make_s_full = compute_mod.make_s_full
+
+    def spy(*a, **kw):
+        captured.update(kw)
+        return real_make_s_full(*a, **kw)
+
+    monkeypatch.setattr(compute_mod, "make_s_full", spy)
+    monkeypatch.setattr("sensmaps.gui.make_s_full", spy)
+
+    mw = MainWindow(master=tk_root)
+    mw.params_panel.set_values({
+        "type_str": "TD_SD_GI",
+        "rs": [[0.0, 0.0, 0.0]], "rd": [[25.0, 0.0, 0.0]],
+        "tg": [[1.0, 2.0]],          # ns
+        "tend": 10.0, "ndt": 10000,  # ns / count (matches MATLAB default)
+        "td_override": False,
+    })
+    mw.recalculate()
+    assert captured["tg"] is not None
+    np.testing.assert_allclose(captured["tg"], [1000.0, 2000.0])  # ps
+    # tend/ndt are always read from the form (Override governs editability only).
+    assert captured["tend"] == 10000.0   # 10 ns × 1000 = 10000 ps
+    assert captured["ndt"] == 10000
+
+    # Override on lets the user edit; converted values flow through unchanged.
+    mw.params_panel.set_values({"td_override": True, "tend": 8.0, "ndt": 8000})
+    mw.recalculate()
+    assert captured["tend"] == 8000.0  # 8 ns → 8000 ps
+    assert captured["ndt"] == 8000

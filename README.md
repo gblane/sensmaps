@@ -12,10 +12,11 @@ This is the Python companion to the MATLAB [`SensitivityCompendium`](https://git
 
 ## Status
 
-v1.1 — CW (`SD`/`SS`/`DS` × `I`) and FD (`SD`/`SS`/`DS` × `I`/`P`) under
-diffusion theory. Tkinter GUI, save PNG/PDF + `.npz`, multi-row optode
-entry, modulation frequency control. Time-domain types in v1.2/v1.3;
-Monte Carlo backend in v3.
+v1.2 — CW (`SD`/`SS`/`DS` × `I`), FD (`SD`/`SS`/`DS` × `I`/`P`), and
+TD (`SD`/`SS`/`DS` × `GI`) under diffusion theory. Tkinter GUI,
+save PNG/PDF + `.npz`, multi-row optode entry, modulation-frequency
+control, gate window for TD GI. Remaining TD types (`DGI`/`T`/`V`)
+in v1.3; Monte Carlo backend in v3.
 
 ## Install
 
@@ -58,12 +59,14 @@ sensmaps
 
 | Control                  | Class      | What it does                                       |
 |--------------------------|------------|----------------------------------------------------|
-| Type                     | expensive  | Measurement type (v1.1: 9 CW + FD combos)          |
+| Type                     | expensive  | Measurement type (v1.2: 12 CW / FD / TD combos)    |
 | rs, rd                   | expensive  | Source / detector coordinates [mm]; multi-row via `;` |
 | n_in, n_out              | expensive  | Index of refraction inside / outside               |
 | musp, mua                | expensive  | Reduced scattering / absorption [1/mm]             |
 | xl, yl, zl, dr           | expensive  | Voxel-grid limits and resolution [mm]              |
 | fmod                     | expensive  | Modulation frequency [MHz]; greyed out unless type is `FD_*` |
+| tg                       | expensive  | Gate window `[start; end]` [ns]; enabled iff type ends in `_GI` |
+| tend, ndt                | expensive  | TD convolution window/steps; greyed out unless `Override` is checked |
 | pert                     | cheap      | Perturbation box size [mm]                         |
 | slice axis, value        | cheap      | Which 2D slice to display                          |
 | quantiles                | cheap      | Color-limit quantiles (lo, hi)                     |

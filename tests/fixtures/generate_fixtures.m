@@ -131,6 +131,66 @@ for k = 1:size(combo_specs, 1)
     fprintf('Wrote %s.mat\n', name);
 end
 
+%% v1.2 fixtures — TD_*_GI (3 combos)
+combos_tend = 10e3;          % ps
+combos_ndt  = 10e3;
+combos_tg   = [1000; 2000];  % ps (1-2 ns gate)
+
+td_specs = {
+    'td_sd_gi', 'TD_SD_GI', sd_rs, sd_rd;
+    'td_ss_gi', 'TD_SS_GI', ss_rs, ss_rd;
+    'td_ds_gi', 'TD_DS_GI', ds_rs, ds_rd;
+};
+
+for k = 1:size(td_specs, 1)
+    name      = td_specs{k, 1};
+    type_str  = td_specs{k, 2};
+    rs        = td_specs{k, 3};
+    rd        = td_specs{k, 4};
+
+    [S, params, Svox] = makeS(type_str, rs, rd, opt_prop, ...
+        'xl', combos_xl, 'yl', combos_yl, 'zl', combos_zl, ...
+        'dr', combos_dr, 'pert', combos_pert, ...
+        'tg', combos_tg, 'tend', combos_tend, 'ndt', combos_ndt);
+
+    x = params.x; y = params.y; z = params.z;
+    xl = combos_xl; yl = combos_yl; zl = combos_zl;
+    dr = combos_dr; pert = combos_pert;
+    tg_ps = combos_tg; tend_ps = combos_tend; ndt = combos_ndt;
+
+    save(fullfile(here, [name, '.mat']), ...
+        'nin', 'nout', 'musp', 'mua', ...
+        'dr', 'pert', 'xl', 'yl', 'zl', ...
+        'rs', 'rd', 'tg_ps', 'tend_ps', 'ndt', ...
+        'x', 'y', 'z', 'Svox', 'S', 'type_str');
+    fprintf('Wrote %s.mat\n', name);
+end
+
+%% Single-point physics references for TD primitives (test_physics.py)
+td_op    = opt_prop;
+td_rs    = [0, 0, 1/musp];   % source with z-offset
+td_rd    = [25, 0, 0];
+td_t     = [-100, 0, 100, 500, 1000, 2000, 5000];   % ps
+td_R_t   = temporalReflectance(td_rs, td_rd, td_t, td_op);
+td_PHI_t = temporalFluence(td_rs, td_rd, td_t, td_op);
+td_tg    = [1000; 2000];     % ps
+td_L_gate = temporalGateTotPathLen(td_rs, td_rd, td_tg, td_op, ...
+    'conv_t', combos_tend, 'conv_dt', combos_tend/combos_ndt);
+
+% Partial path-length single-voxel reference
+td_r_test = [10, 0, 5];
+td_l_gate = temporalGatePartPathLen(td_rs, td_r_test, td_rd, ...
+    combos_dr^3, td_tg, td_op, ...
+    'conv_t', combos_tend, 'conv_dt', combos_tend/combos_ndt, ...
+    'usePar', false, 'FFTconv', true);
+
+save(fullfile(here, 'td_physics_refs.mat'), ...
+    'nin', 'nout', 'musp', 'mua', ...
+    'td_rs', 'td_rd', 'td_t', 'td_R_t', 'td_PHI_t', ...
+    'td_tg', 'td_L_gate', 'td_r_test', 'td_l_gate', ...
+    'combos_tend', 'combos_ndt');
+fprintf('Wrote td_physics_refs.mat\n');
+
 rmpath(deps);
 
 fprintf('Wrote %s\n', fullfile(here, 'cw_sd_i_example1.mat'));

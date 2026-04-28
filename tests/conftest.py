@@ -55,7 +55,25 @@ _COMBO_NAMES = [
     "fd_sd_i", "fd_sd_p",
     "fd_ss_i", "fd_ss_p",
     "fd_ds_i", "fd_ds_p",
+    "td_sd_gi", "td_ss_gi", "td_ds_gi",
 ]
+
+
+@pytest.fixture(scope="session")
+def td_physics_refs() -> dict:
+    """Single-point MATLAB references for temporal_* primitives."""
+    path = Path(__file__).parent / "fixtures" / "td_physics_refs.mat"
+    if not path.exists():
+        pytest.skip(f"Fixture not found at {path}; run generate_fixtures.m")
+    d = scipy.io.loadmat(path, squeeze_me=True)
+    d["td_rs"] = np.atleast_2d(np.asarray(d["td_rs"], dtype=float))
+    d["td_rd"] = np.atleast_2d(np.asarray(d["td_rd"], dtype=float))
+    d["td_r_test"] = np.atleast_2d(np.asarray(d["td_r_test"], dtype=float))
+    d["td_t"]   = np.atleast_1d(np.asarray(d["td_t"], dtype=float))
+    d["td_R_t"] = np.atleast_1d(np.asarray(d["td_R_t"], dtype=float))
+    d["td_PHI_t"] = np.atleast_1d(np.asarray(d["td_PHI_t"], dtype=float))
+    d["td_tg"]  = np.atleast_1d(np.asarray(d["td_tg"], dtype=float))
+    return d
 
 # Register one named fixture per combo. Tests reference them via
 #   request.getfixturevalue("combo_ref_<name>")

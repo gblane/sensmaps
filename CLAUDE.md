@@ -11,10 +11,14 @@ the Python companion to the MATLAB
 [`SensitivityCompendium`](https://github.com/DOIT-Lab/DOIT-Public/tree/main/SensitivityCompendium)
 that accompanies Blaney, Sassaroli & Fantini, *JIOHS* **17**(04), 2430001 (2024).
 
-v1 implements the `CW_SD_I` measurement type (continuous-wave, single-distance, intensity)
-under diffusion theory only. Architecture is set up so v2 can broaden to all ~30 type combos
-(CW/FD/TD × SD/SS/DS × I/GI/DGI/P/T/V) and v3 can add a Monte Carlo backend (`pmcx`) and
-parameter sweeps without restructuring.
+v1.2 implements 12 measurement types under diffusion theory:
+- CW × {SD, SS, DS} × {I}
+- FD × {SD, SS, DS} × {I, P}
+- TD × {SD, SS, DS} × {GI}
+
+Remaining TD data types (`DGI` / `T` / `V`) land in v1.3, completing the full ~30-combo
+table from the MATLAB compendium. v3 adds a Monte Carlo backend (`pmcx`) and parameter
+sweeps without restructuring.
 
 ## Common commands
 
@@ -64,6 +68,13 @@ physics.py   →   compute.py   →   views.py   →   gui.py   →   __main__.p
   and `_ARRANGEMENT_COMBINE[arrangement]`. Adding a new combo is one row in
   each table plus, if needed, a new physics function. `_expand_optodes`
   validates optode counts against the arrangement and applies the z-offset.
+- v1.2 adds the `("TD", "GI")` dispatch entry plus kw-only `tg`, `tend`, `ndt`
+  parameters on `make_s_full`. The TD primitives (`temporal_reflectance`,
+  `temporal_fluence`, `temporal_gate_tot_path_len`, `temporal_gate_part_path_len`)
+  use **picoseconds** internally (matching MATLAB exactly). `make_s_full` builds
+  an `extra` kwargs dict per measurement that threads `fmod` (FD) or
+  `tg`/`conv_t`/`conv_dt` (TD) through to the dispatch callable; existing entries
+  absorb unused kwargs via `**_`.
 
 - **`views.py`** — pure matplotlib, no Tkinter. `slice_s` (port of MATLAB `sliceS.m`) returns
   a 2D plane plus a `PlotParams` dataclass holding axis vectors and LaTeX labels. `make_color_limits`
@@ -84,6 +95,11 @@ physics.py   →   compute.py   →   views.py   →   gui.py   →   __main__.p
   conversion happens in `MainWindow.recalculate`. The `_fmod_entry` is
   state-driven by `type_str` (disabled when CW). Multi-row `rs`/`rd` use
   `_parse_float_matrix` which splits on `;`.
+- v1.2 adds `tg` (gate window), `tend`, and `ndt` to the form. `tg` is in **ns**
+  at the boundary and **ps** internally; conversion (×1000) also happens in
+  `MainWindow.recalculate`. `_tg_entry` is enabled iff `type_str.endswith("_GI")`;
+  `tend`/`ndt` sit behind a single "Override" checkbox so users normally inherit
+  the MATLAB defaults (`tend=10000 ps`, `ndt=10000`) without typing them.
 
 - **`__main__.py`** — argparse + Tk mainloop. `--smoke-test` flag is used by the test suite.
 
@@ -125,6 +141,7 @@ floats and would otherwise reject legitimate inputs.
 
 ## Plan + spec
 
-The full design and TDD-structured implementation plan live in `docs/superpowers/`. The plan
-walks through the v1 build as 19 atomic tasks with failing-test-first steps. v2 / v3 extension
-points are described in §8 of the spec.
+The full design and TDD-structured implementation plans live in `docs/superpowers/plans/`.
+v1 was 19 atomic tasks; v1.1 was 19 tasks; v1.2 was a lighter 10-task combined spec+plan
+(`2026-04-27-sensmaps-v1_2-implementation.md`). Each release reuses the dispatch table and
+arrangement combinator scaffolding without restructuring.

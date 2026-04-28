@@ -189,3 +189,209 @@ def continuous_tot_path_len(rs, rd, opt_prop: OpticalProperties):
 def continuous_part_path_len(rs, r, rd, V: float, opt_prop: OpticalProperties):
     """CW partial path length — wrapper for complex_part_path_len at omega=0."""
     return complex_part_path_len(rs, r, rd, V, 0.0, opt_prop).real
+
+
+C_MM_PER_PS = C_MM_PER_SEC * 1e-12  # 0.299792458 mm/ps
+
+
+def temporal_reflectance(rs, rd, t, opt_prop: OpticalProperties):
+    """Time-resolved reflectance R(t). Port of temporalReflectance.m (DT branch).
+
+    Parameters
+    ----------
+    rs : (Ns, 3) — source coords [mm]; either Ns=1 or Nd=1.
+    rd : (Nd, 3) — detector coords [mm].
+    t  : (Nt,)   — time samples [ps]. Entries with t<=0 yield R=0.
+    opt_prop : OpticalProperties
+
+    Returns
+    -------
+    R : (max(Ns, Nd), Nt) array — temporal reflectance [1/(ps·mm^2)].
+    """
+    rs, x0, y0, z0 = _split_source(rs)
+    rd = np.atleast_2d(np.asarray(rd, dtype=np.float64))
+    t  = np.asarray(t, dtype=np.float64).ravel()
+
+    if rs.shape[0] > 1 and rd.shape[0] > 1:
+        raise ValueError("Cannot use multiple sources and multiple detectors")
+
+    v = C_MM_PER_PS / opt_prop.n_in
+    A = n2a(opt_prop.n_in, opt_prop.n_out)
+    D = 1.0 / (3.0 * opt_prop.musp)
+    zb = -2.0 * A * D
+    mua = opt_prop.mua
+
+    rsp = np.column_stack([x0, y0, -z0 + 2.0 * zb])
+    r1 = np.linalg.norm(rd - rs, axis=1)   # (N,)
+    r2 = np.linalg.norm(rd - rsp, axis=1)  # (N,)
+
+    N = max(rs.shape[0], rd.shape[0])
+    R = np.zeros((N, t.size), dtype=np.float64)
+    pos = t > 0
+    if np.any(pos):
+        tp = t[pos][np.newaxis, :]                     # (1, Np)
+        z0c = np.atleast_1d(z0)[:, np.newaxis]         # (Ns, 1) — broadcasts to N
+        r1c = r1[:, np.newaxis]
+        r2c = r2[:, np.newaxis]
+        prefactor = np.exp(-mua * v * tp) / (
+            (4.0 * np.pi * D * v) ** 1.5 * tp**2.5
+        )
+        bracket = (
+            z0c * np.exp(-r1c**2 / (4.0 * D * v * tp))
+            + (z0c - 2.0 * zb) * np.exp(-r2c**2 / (4.0 * D * v * tp))
+        )
+        R[:, pos] = 0.5 * prefactor * bracket
+    return R
+
+
+def temporal_fluence(rs, r, t, opt_prop: OpticalProperties):
+    """Time-resolved fluence Φ(t). Port of temporalFluence.m.
+
+    Parameters
+    ----------
+    rs : (Ns, 3) — source coords [mm]; either Ns=1 or Nr=1.
+    r  : (Nr, 3) — interior position coords [mm].
+    t  : (Nt,)   — time samples [ps]. Entries with t<=0 yield Φ=0.
+    opt_prop : OpticalProperties
+
+    Returns
+    -------
+    PHI : (max(Ns, Nr), Nt) array — fluence [1/(ps·mm^2)].
+    """
+    rs, x0, y0, z0 = _split_source(rs)
+    r = np.atleast_2d(np.asarray(r, dtype=np.float64))
+    t = np.asarray(t, dtype=np.float64).ravel()
+
+    if rs.shape[0] > 1 and r.shape[0] > 1:
+        raise ValueError("Cannot use multiple sources and multiple positions")
+
+    v = C_MM_PER_PS / opt_prop.n_in
+    A = n2a(opt_prop.n_in, opt_prop.n_out)
+    D = 1.0 / (3.0 * opt_prop.musp)
+    zb = -2.0 * A * D
+    mua = opt_prop.mua
+
+    rsp = np.column_stack([x0, y0, -z0 + 2.0 * zb])
+    r1 = np.linalg.norm(r - rs, axis=1)
+    r2 = np.linalg.norm(r - rsp, axis=1)
+
+    N = max(rs.shape[0], r.shape[0])
+    PHI = np.zeros((N, t.size), dtype=np.float64)
+    pos = t > 0
+    if np.any(pos):
+        tp = t[pos][np.newaxis, :]
+        r1c = r1[:, np.newaxis]
+        r2c = r2[:, np.newaxis]
+        prefactor = (v * np.exp(-mua * v * tp)) / (4.0 * np.pi * D * v * tp) ** 1.5
+        bracket = (
+            np.exp(-r1c**2 / (4.0 * D * v * tp))
+            - np.exp(-r2c**2 / (4.0 * D * v * tp))
+        )
+        PHI[:, pos] = prefactor * bracket
+    return PHI
+
+
+def temporal_gate_tot_path_len(rs, rd, tg, opt_prop: OpticalProperties,
+                                *, conv_t: float = 10000.0,
+                                conv_dt: float = 1.0):
+    """Gated total path length L for time-domain GI. Port of temporalGateTotPathLen.m.
+
+    Parameters
+    ----------
+    rs : (1, 3) — source coords [mm].
+    rd : (1, 3) — detector coords [mm].
+    tg : (2,)   — [t_start, t_end] gate edges [ps].
+    opt_prop : OpticalProperties
+    conv_t  : float — half-width of convolution time window [ps] (default 10000).
+    conv_dt : float — convolution time step [ps] (default 1).
+
+    Returns
+    -------
+    L : float — gated total path length [mm].
+    """
+    tg = np.asarray(tg, dtype=np.float64).ravel()
+    if tg.size != 2:
+        raise ValueError(f"tg must have 2 elements, got {tg.size}")
+
+    # Values of R(t) for t > tg[1] never enter the gate integral, so cap the
+    # effective time window at tg[1]. Bit-identical to the full window.
+    conv_t_eff = min(float(conv_t), float(tg[1]))
+
+    v = C_MM_PER_PS / opt_prop.n_in
+    t = np.arange(-conv_t_eff, conv_t_eff + conv_dt / 2.0, conv_dt)  # mirror MATLAB colon
+    R_t = temporal_reflectance(rs, rd, t, opt_prop)          # (1, Nt)
+
+    i1 = int(np.argmin(np.abs(t - tg[0])))
+    i2 = int(np.argmin(np.abs(t - tg[1])))
+    sl = slice(i1, i2 + 1)
+
+    num = np.trapezoid(v * t[sl] * R_t[:, sl], t[sl], axis=1)
+    R_g = np.trapezoid(R_t[:, sl], t[sl], axis=1)
+    return float((num / R_g)[0])
+
+
+def temporal_gate_part_path_len(rs, r, rd, V: float, tg,
+                                 opt_prop: OpticalProperties,
+                                 *, conv_t: float = 10000.0,
+                                 conv_dt: float = 1.0):
+    """Gated partial path length per voxel. Port of temporalGatePartPathLen.m
+    (FFT-convolution branch, no parfor; matches makeS.m default invocation).
+
+    Parameters
+    ----------
+    rs : (1, 3)  — source coords [mm].
+    r  : (Nr, 3) — voxel centers [mm].
+    rd : (1, 3)  — detector coords [mm].
+    V  : float   — voxel volume [mm^3].
+    tg : (2,)    — [t_start, t_end] gate edges [ps].
+    opt_prop : OpticalProperties
+    conv_t, conv_dt : convolution window/step [ps].
+
+    Returns
+    -------
+    l : (Nr,) — gated partial path length [mm].
+    """
+    tg = np.asarray(tg, dtype=np.float64).ravel()
+    if tg.size != 2:
+        raise ValueError(f"tg must have 2 elements, got {tg.size}")
+    r = np.atleast_2d(np.asarray(r, dtype=np.float64))
+
+    # PHI(t') and R(t') for t' > tg[1] never enter the gate integral; cap the
+    # effective window at tg[1] for a bit-identical but much faster computation.
+    conv_t_eff = min(float(conv_t), float(tg[1]))
+    t = np.arange(-conv_t_eff, conv_t_eff + conv_dt / 2.0, conv_dt)
+    pos = t > 0
+    n_pos = int(np.sum(pos))
+    t_pos = t[pos]
+
+    # Source→detector reflectance for normalization (gate integral)
+    Rsd_t = temporal_reflectance(rs, rd, t, opt_prop)[0]      # (Nt,)
+    i1 = int(np.argmin(np.abs(t - tg[0])))
+    i2 = int(np.argmin(np.abs(t - tg[1])))
+    Rsd_g = np.trapezoid(Rsd_t[i1:i2 + 1], t[i1:i2 + 1])
+
+    # Source→voxel fluence and voxel→detector reflectance on positive-t only.
+    PHI_pos = temporal_fluence(rs, r, t_pos, opt_prop)            # (Nr, n_pos)
+    R_pos   = temporal_reflectance(r, rd, t_pos, opt_prop)        # (Nr, n_pos)
+
+    # Linear convolution via real-FFT on the compact (positive-t-only) signals.
+    # MATLAB's `tmp = ifft(fft(PHIsi).*fft(Rid)); tmp(1:n_pos)` (with PHIsi/Rid
+    # zero-padded to length Nt) is equivalent to:
+    #   conv_PR[:, 0]  = 0  (gate point at conv_dt — empty integration interval)
+    #   conv_PR[:, k]  = (PHI_pos * R_pos)[k-1]   for k >= 1
+    # by shifting the leading-zero offset out of the FFT (halves the transform
+    # length, ~3× speedup at the default ndt=10000).
+    import scipy.fft as _sfft
+    M = _sfft.next_fast_len(2 * n_pos - 1, real=True)
+    fft_PHI = _sfft.rfft(PHI_pos, n=M, axis=1, workers=-1)
+    fft_R   = _sfft.rfft(R_pos,   n=M, axis=1, workers=-1)
+    c_compact = _sfft.irfft(fft_PHI * fft_R, n=M, axis=1, workers=-1)
+    conv_PR = np.zeros((r.shape[0], n_pos), dtype=np.float64)
+    conv_PR[:, 1:] = c_compact[:, : n_pos - 1]
+
+    # Map gate edges into the positive-only axis and integrate (rectangular sum × dt)
+    j1 = int(np.argmin(np.abs(t[i1] - t_pos)))
+    j2 = int(np.argmin(np.abs(t[i2] - t_pos)))
+    num = np.sum(conv_PR[:, j1:j2 + 1], axis=1) * conv_dt
+
+    return (num / Rsd_g) * V

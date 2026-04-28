@@ -21,6 +21,8 @@ from sensmaps.physics import (
     complex_tot_path_len,
     continuous_part_path_len,
     continuous_tot_path_len,
+    temporal_gate_part_path_len,
+    temporal_gate_tot_path_len,
 )
 
 
@@ -189,6 +191,15 @@ _PHYSICS_DISPATCH: dict[tuple[str, str], tuple[Callable, Callable, Callable]] = 
             complex_part_path_len(rs_i, r_all, rd_i, V, 2.0 * np.pi * fmod, op).imag,
         lambda *_a, **_kw: 1.0,
     ),
+    ("TD", "GI"): (
+        lambda rs_i, rd_i, op, tg, conv_t, conv_dt, **_:
+            temporal_gate_tot_path_len(rs_i, rd_i, tg, op,
+                                        conv_t=conv_t, conv_dt=conv_dt),
+        lambda rs_i, r_all, rd_i, V, op, tg, conv_t, conv_dt, **_:
+            temporal_gate_part_path_len(rs_i, r_all, rd_i, V, tg, op,
+                                         conv_t=conv_t, conv_dt=conv_dt),
+        lambda *_a, **_kw: 1.0,
+    ),
 }
 
 
@@ -234,6 +245,10 @@ class SensitivityResult:
     # NEW in v1.1 — kw-only so existing positional construction keeps working:
     Y_per_meas: np.ndarray = field(kw_only=True)
     fmod: float | None = field(default=None, kw_only=True)
+    # NEW in v1.2 — TD_*_GI parameters (None when not a TD type):
+    tg:   np.ndarray | None = field(default=None, kw_only=True)
+    tend: float | None = field(default=None, kw_only=True)
+    ndt:  int | None = field(default=None, kw_only=True)
 
 
 def make_s_full(
@@ -249,6 +264,9 @@ def make_s_full(
     sim_typ: str = "DT",
     *,
     fmod: float | None = None,
+    tg=None,
+    tend: float | None = None,
+    ndt: int | None = None,
 ) -> SensitivityResult:
     """Compute sensitivity map for a measurement type. Mirror of MATLAB makeS.m.
 
@@ -263,17 +281,42 @@ def make_s_full(
             f"sim_typ={sim_typ!r} is not implemented in v1 (DT only)"
         )
 
+    key = (parsed.temporal, parsed.data_type)
+    if key not in _PHYSICS_DISPATCH:
+        raise NotImplementedError(
+            f"type_str={type_str!r} is not implemented in v1.2 "
+            f"(no dispatch entry for {key})"
+        )
+
     if parsed.temporal == "FD" and fmod is None:
         raise ValueError(
             f"fmod is required for FD_* types (got fmod=None for {type_str!r})"
         )
 
-    key = (parsed.temporal, parsed.data_type)
-    if key not in _PHYSICS_DISPATCH:
-        raise NotImplementedError(
-            f"type_str={type_str!r} is not implemented in v1.1 "
-            f"(no dispatch entry for {key})"
-        )
+    tg_arr: np.ndarray | None = None
+    conv_t: float | None = None
+    conv_dt: float | None = None
+    if parsed.temporal == "TD":
+        if tg is None:
+            raise ValueError(
+                f"tg is required for TD_* types (got tg=None for {type_str!r})"
+            )
+        tg_arr = np.asarray(tg, dtype=np.float64).ravel()
+        if tg_arr.size != 2:
+            raise ValueError(f"tg must be a 2-element array, got shape {tg_arr.shape}")
+        if tg_arr[1] <= tg_arr[0]:
+            raise ValueError(f"tg[1] must be > tg[0], got tg={tg_arr.tolist()}")
+        if tend is None:
+            tend = 10000.0
+        if ndt is None:
+            ndt = 10000
+        if tend <= 0 or ndt <= 0:
+            raise ValueError(
+                f"tend and ndt must be positive, got tend={tend}, ndt={ndt}"
+            )
+        conv_t = float(tend)
+        conv_dt = conv_t / int(ndt)
+
     L_fn, ll_fn, Y_fn = _PHYSICS_DISPATCH[key]
 
     # `pert % dr == 0` looks right but is a float-arithmetic trap
@@ -297,17 +340,23 @@ def make_s_full(
     r_all = np.column_stack([XX.ravel(), YY.ravel(), ZZ.ravel()])
     z_coords = r_all[:, 2]
 
-    # Per-measurement physics.
+    # Per-measurement physics. `extra` carries domain-specific kwargs that
+    # the relevant dispatch entry consumes; entries that don't need them
+    # absorb via **_.
+    extra: dict = {"fmod": fmod}
+    if parsed.temporal == "TD":
+        extra.update(tg=tg_arr, conv_t=conv_t, conv_dt=conv_dt)
+
     Ls: list[float] = []
     Ys: list[float] = []
     lls: list[np.ndarray] = []
     for i in range(n_meas):
         rs_i = rSrcs[[i], :]
         rd_i = rDets[[i], :]
-        Ls.append(L_fn(rs_i, rd_i, opt_prop, fmod=fmod))
-        Ys.append(Y_fn(rs_i, rd_i, opt_prop, fmod=fmod))
+        Ls.append(L_fn(rs_i, rd_i, opt_prop, **extra))
+        Ys.append(Y_fn(rs_i, rd_i, opt_prop, **extra))
         with np.errstate(divide="ignore", invalid="ignore"):
-            l_vec = ll_fn(rs_i, r_all, rd_i, dr ** 3, opt_prop, fmod=fmod)
+            l_vec = ll_fn(rs_i, r_all, rd_i, dr ** 3, opt_prop, **extra)
         l_vec[z_coords < 0] = 0.0
         l_vec = np.nan_to_num(l_vec, nan=0.0)
         lls.append(l_vec.reshape(XX.shape))
@@ -322,6 +371,9 @@ def make_s_full(
         rs=rSrcs, rd=rDets, opt_prop=opt_prop, pert=tuple(pert), dr=dr,
         Y_per_meas=np.asarray(Ys, dtype=np.float64),
         fmod=fmod,
+        tg=tg_arr,
+        tend=(conv_t if parsed.temporal == "TD" else None),
+        ndt=(int(ndt) if parsed.temporal == "TD" else None),
     )
 
 
@@ -338,11 +390,14 @@ def make_s(
     sim_typ: str = "DT",
     *,
     fmod: float | None = None,
+    tg=None,
+    tend: float | None = None,
+    ndt: int | None = None,
 ):
     """Thin variant returning only `(S, params)`. See `make_s_full` for details."""
     result = make_s_full(
         type_str=type_str, rs=rs, rd=rd, opt_prop=opt_prop,
         xl=xl, yl=yl, zl=zl, dr=dr, pert=pert, sim_typ=sim_typ,
-        fmod=fmod,
+        fmod=fmod, tg=tg, tend=tend, ndt=ndt,
     )
     return result.S, result.params
