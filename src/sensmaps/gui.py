@@ -238,8 +238,10 @@ class ParameterPanel:
         self._inputs.append(self._tend_entry)
 
         self._vars["td_override"] = tk.BooleanVar(value=False)
-        ttk.Checkbutton(td_frame, text="Override", variable=self._vars["td_override"]
-                        ).pack(side=tk.LEFT, padx=(4, 0))
+        self._td_override_check = ttk.Checkbutton(
+            td_frame, text="Override", variable=self._vars["td_override"]
+        )
+        self._td_override_check.pack(side=tk.LEFT, padx=(4, 0))
         row += 1
 
         ttk.Label(f, text="ndt").grid(row=row, column=0, sticky="w")
@@ -319,6 +321,7 @@ class ParameterPanel:
         # TD-only fields: tg always editable for _GI; tend/ndt gated by checkbox.
         is_td = values["type_str"].startswith("TD_")
         self._tg_entry.config(state="normal" if values["type_str"].endswith("_GI") else "disabled")
+        self._td_override_check.config(state="normal" if is_td else "disabled")
         td_edit = is_td and values["td_override"]
         self._tend_entry.config(state="normal" if td_edit else "disabled")
         self._ndt_entry.config(state="normal" if td_edit else "disabled")
