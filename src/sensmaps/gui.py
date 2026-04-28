@@ -61,6 +61,10 @@ PARAM_CLASS: dict[str, str] = {
     "zl": "expensive",
     "dr": "expensive",
     "fmod": "expensive",                  # NEW
+    "tg": "expensive",                    # NEW (v1.2)
+    "tend": "expensive",                  # NEW (v1.2)
+    "ndt": "expensive",                   # NEW (v1.2)
+    "td_override": "expensive",           # NEW (v1.2)
     "pert": "cheap",
     "pert_override": "cheap",
     "slice_axis": "cheap",
@@ -81,6 +85,10 @@ _DEFAULTS: dict[str, Any] = {
     "zl": [0.0, 25.0],
     "dr": 1.0,
     "fmod": 100.0,                  # NEW — MHz
+    "tg": [[1.0, 2.0]],             # NEW (v1.2) — ns; single-row matrix for parser reuse
+    "tend": 10.0,                   # NEW (v1.2) — ns
+    "ndt": 10000,                   # NEW (v1.2)
+    "td_override": False,           # NEW (v1.2)
     "pert": [1.0, 1.0, 1.0],
     "pert_override": False,
     "slice_axis": "y",
@@ -151,6 +159,7 @@ class ParameterPanel:
             "CW_SD_I", "CW_SS_I", "CW_DS_I",
             "FD_SD_I", "FD_SS_I", "FD_DS_I",
             "FD_SD_P", "FD_SS_P", "FD_DS_P",
+            "TD_SD_GI", "TD_SS_GI", "TD_DS_GI",
         ]
         ttk.Label(f, text="Type").grid(row=row, column=0, sticky="w")
         self._vars["type_str"] = tk.StringVar(value="CW_SD_I")
@@ -208,6 +217,36 @@ class ParameterPanel:
         self._fmod_entry = ttk.Entry(f, textvariable=self._vars["fmod"], width=10)
         self._fmod_entry.grid(row=row, column=1, sticky="w")
         self._inputs.append(self._fmod_entry)
+        row += 1
+
+        # Gate window for TD_*_GI (entered as `start; end` in ns; ps internally)
+        ttk.Label(f, text="tg [start; end] (ns)").grid(row=row, column=0, sticky="w")
+        self._vars["tg"] = tk.StringVar()
+        self._tg_entry = ttk.Entry(f, textvariable=self._vars["tg"], width=14)
+        self._tg_entry.grid(row=row, column=1, sticky="ew")
+        self._inputs.append(self._tg_entry)
+        row += 1
+
+        # TD numerics (tend / ndt) — disabled by default behind override checkbox
+        ttk.Label(f, text="tend (ns)").grid(row=row, column=0, sticky="w")
+        td_frame = ttk.Frame(f)
+        td_frame.grid(row=row, column=1, sticky="ew")
+
+        self._vars["tend"] = tk.StringVar()
+        self._tend_entry = ttk.Entry(td_frame, textvariable=self._vars["tend"], width=8)
+        self._tend_entry.pack(side=tk.LEFT)
+        self._inputs.append(self._tend_entry)
+
+        self._vars["td_override"] = tk.BooleanVar(value=False)
+        ttk.Checkbutton(td_frame, text="Override", variable=self._vars["td_override"]
+                        ).pack(side=tk.LEFT, padx=(4, 0))
+        row += 1
+
+        ttk.Label(f, text="ndt").grid(row=row, column=0, sticky="w")
+        self._vars["ndt"] = tk.StringVar()
+        self._ndt_entry = ttk.Entry(f, textvariable=self._vars["ndt"], width=10)
+        self._ndt_entry.grid(row=row, column=1, sticky="w")
+        self._inputs.append(self._ndt_entry)
         row += 1
 
         # Perturbation
@@ -277,6 +316,13 @@ class ParameterPanel:
         else:
             self._fmod_entry.config(state="disabled")
 
+        # TD-only fields: tg always editable for _GI; tend/ndt gated by checkbox.
+        is_td = values["type_str"].startswith("TD_")
+        self._tg_entry.config(state="normal" if values["type_str"].endswith("_GI") else "disabled")
+        td_edit = is_td and values["td_override"]
+        self._tend_entry.config(state="normal" if td_edit else "disabled")
+        self._ndt_entry.config(state="normal" if td_edit else "disabled")
+
         if name.startswith("opt_prop."):
             self._notify("opt_prop", values["opt_prop"])
         else:
@@ -299,6 +345,10 @@ class ParameterPanel:
             "zl": _parse_float_list(v["zl"].get(), 2),
             "dr": float(v["dr"].get()),
             "fmod": float(v["fmod"].get()),
+            "tg": _parse_float_matrix(v["tg"].get(), 2),
+            "tend": float(v["tend"].get()),
+            "ndt": int(float(v["ndt"].get())),
+            "td_override": bool(v["td_override"].get()),
             "pert": _parse_float_list(v["pert"].get(), 3),
             "pert_override": bool(v["pert_override"].get()),
             "slice_axis": v["slice_axis"].get(),
@@ -348,6 +398,14 @@ class ParameterPanel:
             self._vars["dr"].set(f"{values['dr']:g}")
         if "fmod" in values:
             self._vars["fmod"].set(f"{values['fmod']:g}")
+        if "tg" in values:
+            self._vars["tg"].set(_fmt_matrix(values["tg"]))
+        if "tend" in values:
+            self._vars["tend"].set(f"{values['tend']:g}")
+        if "ndt" in values:
+            self._vars["ndt"].set(f"{int(values['ndt']):d}")
+        if "td_override" in values:
+            self._vars["td_override"].set(values["td_override"])
         if "pert_override" in values:
             self._vars["pert_override"].set(values["pert_override"])
         if "pert" in values:
@@ -497,13 +555,18 @@ class MainWindow:
             return
         try:
             op = _opt_prop_from_dict(values["opt_prop"])
-            fmod_hz = (
-                values["fmod"] * 1e6
-                if values["type_str"].startswith("FD_")
-                else None
-            )
+            type_str = values["type_str"]
+            fmod_hz = values["fmod"] * 1e6 if type_str.startswith("FD_") else None
+
+            tg_ps = tend_ps = ndt_val = None
+            if type_str.startswith("TD_"):
+                tg_ps = np.asarray(values["tg"][0], dtype=float) * 1000.0
+                if values["td_override"]:
+                    tend_ps = float(values["tend"]) * 1000.0
+                    ndt_val = int(values["ndt"])
+
             result = make_s_full(
-                type_str=values["type_str"],
+                type_str=type_str,
                 rs=np.asarray(values["rs"], dtype=float),
                 rd=np.asarray(values["rd"], dtype=float),
                 opt_prop=op,
@@ -513,6 +576,7 @@ class MainWindow:
                 dr=values["dr"],
                 pert=tuple(values["pert"]),
                 fmod=fmod_hz,
+                tg=tg_ps, tend=tend_ps, ndt=ndt_val,
             )
         except (ValueError, NotImplementedError) as e:
             messagebox.showerror("Recalculate failed", str(e))
@@ -575,7 +639,10 @@ class MainWindow:
                 type_str=c.type_str,
                 n_in=c.opt_prop.n_in, n_out=c.opt_prop.n_out,
                 musp=c.opt_prop.musp, mua=c.opt_prop.mua,
-                fmod=(np.nan if c.fmod is None else c.fmod),    # NEW
+                fmod=(np.nan if c.fmod is None else c.fmod),    # NEW (v1.1)
+                tg=(np.full(2, np.nan) if c.tg is None else c.tg),   # NEW (v1.2) ps
+                tend=(np.nan if c.tend is None else c.tend),         # NEW (v1.2) ps
+                ndt=(-1 if c.ndt is None else c.ndt),                # NEW (v1.2)
                 sensmaps_version=version,
             )
         except Exception as e:
