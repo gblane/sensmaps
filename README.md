@@ -15,8 +15,22 @@ This is the Python companion to the MATLAB [`SensitivityCompendium`](https://git
 v1.2 — CW (`SD`/`SS`/`DS` × `I`), FD (`SD`/`SS`/`DS` × `I`/`P`), and
 TD (`SD`/`SS`/`DS` × `GI`) under diffusion theory. Tkinter GUI,
 save PNG/PDF + `.npz`, multi-row optode entry, modulation-frequency
-control, gate window for TD GI. Remaining TD types (`DGI`/`T`/`V`)
-in v1.3; Monte Carlo backend in v3.
+control, gate window for TD GI.
+
+## Roadmap
+
+- **v1.3** — Remaining TD data types (`DGI` / `T` / `V`) across `{SD, SS, DS}`,
+  completing the full ~30-combo table from the MATLAB compendium.
+- **v1.4** — GUI enhancements:
+  - Option to plot all three slices (x-plane, y-plane, z-plane) simultaneously
+    in third-angle projection.
+  - Option to threshold the map based on noise and switch the colorbar from
+    `S` to SNR.
+- **v3** — Monte Carlo backend via [`umcx`](https://github.com/fangq/umcx)
+  (replacing the earlier `pmcx` plan), plus parameter sweeps. The four-layer
+  architecture (physics → compute → views → gui) accommodates this without
+  restructuring; only `physics.py` gains a MC-backed sibling and `compute.py`
+  picks `sim_typ` between `"DT"` and `"MC"`.
 
 ## Install
 

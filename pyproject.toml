@@ -14,7 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
-mc  = ["pmcx"]
+# mc backend planned for v3: https://github.com/fangq/umcx (install method TBD)
 
 [project.scripts]
 sensmaps = "sensmaps.__main__:main"

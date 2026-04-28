@@ -1,5 +1,1 @@
 ﻿Now:
-
-okay if in future version:
-- add option to plot all three slices (x-plane,y-plane,z-plane) in 3rd angle projection at the same time
-- add option to threshold map based on noise and change colorbar to SNR instead of S

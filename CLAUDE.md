@@ -17,7 +17,9 @@ v1.2 implements 12 measurement types under diffusion theory:
 - TD × {SD, SS, DS} × {GI}
 
 Remaining TD data types (`DGI` / `T` / `V`) land in v1.3, completing the full ~30-combo
-table from the MATLAB compendium. v3 adds a Monte Carlo backend (`pmcx`) and parameter
+table from the MATLAB compendium. v1.4 adds GUI niceties (third-angle three-slice view;
+SNR thresholding/colorbar). v3 adds a Monte Carlo backend via
+[`umcx`](https://github.com/fangq/umcx) (formerly planned as `pmcx`) and parameter
 sweeps without restructuring.
 
 ## Common commands
