@@ -21,7 +21,6 @@ def main(argv: list[str] | None = None) -> int:
     root.title("sensmaps")
     root.geometry("1100x750")
     window = MainWindow(master=root)
-    window.load_session()
 
     if args.smoke_test:
         root.update()

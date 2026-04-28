@@ -155,7 +155,7 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, rs=None, rd=None, pert=(1
 
     p_str = f"{pert[0]:g} x {pert[1]:g} x {pert[2]:g}"
     colorbar.set_label(
-        rf"$\mathcal{{S}}$ to a ( {p_str} ) $mm^3$ absorption perturbation"
+        rf"$\mathcal{{S}}$ to a ( {p_str} ) mm$^3$ absorption perturbation"
     )
 
     ax.set_title(r"$\mathcal{S} = \partial \mu_{a,meas} / \partial \mu_{a,pert}$" "\n"

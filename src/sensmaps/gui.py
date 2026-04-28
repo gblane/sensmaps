@@ -283,7 +283,7 @@ class ParameterPanel:
         row += 1
 
         # Color quantiles
-        ttk.Label(f, text="quantiles [lo hi]").grid(row=row, column=0, sticky="w")
+        ttk.Label(f, text="colormap limits (quantiles) [lo hi]").grid(row=row, column=0, sticky="w")
         self._vars["quantiles"] = tk.StringVar()
         en_q = ttk.Entry(f, textvariable=self._vars["quantiles"], width=14)
         en_q.grid(row=row, column=1, sticky="ew")
@@ -664,6 +664,10 @@ class MainWindow:
             return
         try:
             values = json.loads(SESSION_FILE.read_text())
+            # Always start with dr=1 mm so the first recalculate is fast.
+            values["dr"] = 1.0
+            if not values.get("pert_override", False):
+                values["pert"] = [1.0, 1.0, 1.0]
             self.params_panel.set_values(values)
         except Exception:
             # Corrupt or schema-incompatible session — leave panel at defaults.
