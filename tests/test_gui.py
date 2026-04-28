@@ -436,17 +436,17 @@ def test_recalculate_passes_tg_in_ps_for_td(tk_root, tmp_path, monkeypatch):
         "type_str": "TD_SD_GI",
         "rs": [[0.0, 0.0, 0.0]], "rd": [[25.0, 0.0, 0.0]],
         "tg": [[1.0, 2.0]],          # ns
-        "tend": 10.0, "ndt": 10000,  # ns / count
+        "tend": 10.0, "ndt": 10000,  # ns / count (matches MATLAB default)
         "td_override": False,
     })
     mw.recalculate()
     assert captured["tg"] is not None
     np.testing.assert_allclose(captured["tg"], [1000.0, 2000.0])  # ps
-    # Without override, tend/ndt go through as None (compute layer fills MATLAB defaults)
-    assert captured["tend"] is None
-    assert captured["ndt"] is None
+    # tend/ndt are always read from the form (Override governs editability only).
+    assert captured["tend"] == 10000.0   # 10 ns × 1000 = 10000 ps
+    assert captured["ndt"] == 10000
 
-    # Now turn override on and confirm tend/ndt convert ns → ps
+    # Override on lets the user edit; converted values flow through unchanged.
     mw.params_panel.set_values({"td_override": True, "tend": 8.0, "ndt": 8000})
     mw.recalculate()
     assert captured["tend"] == 8000.0  # 8 ns → 8000 ps

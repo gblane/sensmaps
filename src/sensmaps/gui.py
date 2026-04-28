@@ -86,8 +86,8 @@ _DEFAULTS: dict[str, Any] = {
     "dr": 1.0,
     "fmod": 100.0,                  # NEW — MHz
     "tg": [[1.0, 2.0]],             # NEW (v1.2) — ns; single-row matrix for parser reuse
-    "tend": 10.0,                   # NEW (v1.2) — ns
-    "ndt": 10000,                   # NEW (v1.2)
+    "tend": 10.0,                   # NEW (v1.2) — ns (matches MATLAB default 10000 ps)
+    "ndt": 10000,                   # NEW (v1.2) — matches MATLAB default
     "td_override": False,           # NEW (v1.2)
     "pert": [1.0, 1.0, 1.0],
     "pert_override": False,
@@ -564,9 +564,10 @@ class MainWindow:
             tg_ps = tend_ps = ndt_val = None
             if type_str.startswith("TD_"):
                 tg_ps = np.asarray(values["tg"][0], dtype=float) * 1000.0
-                if values["td_override"]:
-                    tend_ps = float(values["tend"]) * 1000.0
-                    ndt_val = int(values["ndt"])
+                # tend/ndt always read from form; "Override" only governs editability
+                # so the user always sees what's being used (grayed when not editing).
+                tend_ps = float(values["tend"]) * 1000.0
+                ndt_val = int(values["ndt"])
 
             result = make_s_full(
                 type_str=type_str,
