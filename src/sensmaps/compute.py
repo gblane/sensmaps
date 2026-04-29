@@ -229,6 +229,21 @@ _PHYSICS_DISPATCH: dict[tuple[str, str], tuple[Callable, Callable, Callable]] = 
         lambda rs_i, rd_i, op, **_:
             _scalar(temporal_var(rs_i, rd_i, op)),
     ),
+    # DGI (SD-only): difference of two gates. Numerically equivalent to running
+    # SS combiner over (early, late) gates with Y=1.
+    ("TD", "DGI"): (
+        lambda rs_i, rd_i, op, tg, tg2, conv_t, conv_dt, **_:
+            temporal_gate_tot_path_len(rs_i, rd_i, tg,  op,
+                                        conv_t=conv_t, conv_dt=conv_dt)
+            - temporal_gate_tot_path_len(rs_i, rd_i, tg2, op,
+                                          conv_t=conv_t, conv_dt=conv_dt),
+        lambda rs_i, r_all, rd_i, V, op, tg, tg2, conv_t, conv_dt, **_:
+            temporal_gate_part_path_len(rs_i, r_all, rd_i, V, tg,  op,
+                                         conv_t=conv_t, conv_dt=conv_dt)
+            - temporal_gate_part_path_len(rs_i, r_all, rd_i, V, tg2, op,
+                                           conv_t=conv_t, conv_dt=conv_dt),
+        lambda *_a, **_kw: 1.0,
+    ),
 }
 
 
@@ -278,6 +293,8 @@ class SensitivityResult:
     tg:   np.ndarray | None = field(default=None, kw_only=True)
     tend: float | None = field(default=None, kw_only=True)
     ndt:  int | None = field(default=None, kw_only=True)
+    # NEW in v1.3 — second (early) gate for TD_*_DGI:
+    tg2:  np.ndarray | None = field(default=None, kw_only=True)
 
 
 def make_s_full(
@@ -294,6 +311,7 @@ def make_s_full(
     *,
     fmod: float | None = None,
     tg=None,
+    tg2=None,
     tend: float | None = None,
     ndt: int | None = None,
 ) -> SensitivityResult:
@@ -323,6 +341,7 @@ def make_s_full(
         )
 
     tg_arr: np.ndarray | None = None
+    tg2_arr: np.ndarray | None = None
     conv_t: float | None = None
     conv_dt: float | None = None
     if parsed.temporal == "TD":
@@ -337,6 +356,21 @@ def make_s_full(
                 raise ValueError(f"tg must be a 2-element array, got shape {tg_arr.shape}")
             if tg_arr[1] <= tg_arr[0]:
                 raise ValueError(f"tg[1] must be > tg[0], got tg={tg_arr.tolist()}")
+        if parsed.data_type == "DGI":
+            if parsed.arrangement != "SD":
+                raise NotImplementedError(
+                    f"DGI is only supported for SD arrangement (got {type_str!r}); "
+                    "matches MATLAB makeS.m restriction."
+                )
+            if tg2 is None:
+                raise ValueError(
+                    f"tg2 (early gate) is required for TD_*_DGI (got tg2=None)"
+                )
+            tg2_arr = np.asarray(tg2, dtype=np.float64).ravel()
+            if tg2_arr.size != 2:
+                raise ValueError(f"tg2 must be a 2-element array, got shape {tg2_arr.shape}")
+            if tg2_arr[1] <= tg2_arr[0]:
+                raise ValueError(f"tg2[1] must be > tg2[0], got tg2={tg2_arr.tolist()}")
         if tend is None:
             tend = 10000.0
         if ndt is None:
@@ -376,7 +410,7 @@ def make_s_full(
     # absorb via **_.
     extra: dict = {"fmod": fmod}
     if parsed.temporal == "TD":
-        extra.update(tg=tg_arr, conv_t=conv_t, conv_dt=conv_dt)
+        extra.update(tg=tg_arr, tg2=tg2_arr, conv_t=conv_t, conv_dt=conv_dt)
 
     Ls: list[float] = []
     Ys: list[float] = []
@@ -403,6 +437,7 @@ def make_s_full(
         Y_per_meas=np.asarray(Ys, dtype=np.float64),
         fmod=fmod,
         tg=tg_arr,
+        tg2=tg2_arr,
         tend=(conv_t if parsed.temporal == "TD" else None),
         ndt=(int(ndt) if parsed.temporal == "TD" else None),
     )
@@ -422,6 +457,7 @@ def make_s(
     *,
     fmod: float | None = None,
     tg=None,
+    tg2=None,
     tend: float | None = None,
     ndt: int | None = None,
 ):
@@ -429,6 +465,6 @@ def make_s(
     result = make_s_full(
         type_str=type_str, rs=rs, rd=rd, opt_prop=opt_prop,
         xl=xl, yl=yl, zl=zl, dr=dr, pert=pert, sim_typ=sim_typ,
-        fmod=fmod, tg=tg, tend=tend, ndt=ndt,
+        fmod=fmod, tg=tg, tg2=tg2, tend=tend, ndt=ndt,
     )
     return result.S, result.params
