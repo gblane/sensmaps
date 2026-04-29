@@ -16,7 +16,9 @@
       "Bash(git commit -m 'feat: __main__ with --smoke-test flag and session persistence on close *)",
       "Bash(git commit -m 'docs: add README with install, usage, and paper citation *)",
       "Bash(git push *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(.venv/bin/pytest tests/test_physics.py -k \"var\" -v)",
+      "Bash(.venv/bin/pytest -q)"
     ]
   }
 }

@@ -496,3 +496,46 @@ def temporal_kth_mom_part_path_len(rs, r, rd, V: float, k: int,
     integral = np.sum(weighted, axis=1) * (conv_dt ** 2)
     d = lC * tk - (V / RC) * integral
     return -d / tk
+
+
+def temporal_var(rs, rd, opt_prop: OpticalProperties):
+    """Variance of t for the temporal point-spread function: ⟨t²⟩ − ⟨t⟩² [ps²].
+
+    Port of `temporalVar.m`.
+    """
+    t1 = temporal_kth_moment(rs, rd, 1, opt_prop)
+    t2 = temporal_kth_moment(rs, rd, 2, opt_prop)
+    return t2 - t1 ** 2
+
+
+def temporal_var_tot_path_len(rs, rd, opt_prop: OpticalProperties):
+    """Total path length L for variance. Port of `temporalVarTotPathLen.m`.
+
+    L = (⟨t²⟩·L₂ − 2·⟨t⟩²·L₁) / (⟨t²⟩ − ⟨t⟩²)
+    """
+    t1 = temporal_kth_moment(rs, rd, 1, opt_prop)
+    t2 = temporal_kth_moment(rs, rd, 2, opt_prop)
+    Vvar = t2 - t1 ** 2
+    L1 = temporal_kth_mom_tot_path_len(rs, rd, 1, opt_prop)
+    L2 = temporal_kth_mom_tot_path_len(rs, rd, 2, opt_prop)
+    return (t2 * L2 - 2.0 * t1 ** 2 * L1) / Vvar
+
+
+def temporal_var_part_path_len(rs, r, rd, V: float,
+                                opt_prop: OpticalProperties,
+                                *, conv_t: float = 10000.0,
+                                conv_dt: float = 1.0):
+    """Partial path length per voxel for variance. Port of `temporalVarPartPathLen.m`.
+
+    l = (⟨t²⟩·l₂ − 2·⟨t⟩²·l₁) / (⟨t²⟩ − ⟨t⟩²); NaNs → 0.
+    """
+    t1_arr = np.asarray(temporal_kth_moment(rs, rd, 1, opt_prop)).ravel()[0]
+    t2_arr = np.asarray(temporal_kth_moment(rs, rd, 2, opt_prop)).ravel()[0]
+    Vvar = t2_arr - t1_arr ** 2
+    l1 = temporal_kth_mom_part_path_len(rs, r, rd, V, 1, opt_prop,
+                                         conv_t=conv_t, conv_dt=conv_dt)
+    l2 = temporal_kth_mom_part_path_len(rs, r, rd, V, 2, opt_prop,
+                                         conv_t=conv_t, conv_dt=conv_dt)
+    out = (t2_arr * l2 - 2.0 * t1_arr ** 2 * l1) / Vvar
+    out = np.where(np.isnan(out), 0.0, out)
+    return out
