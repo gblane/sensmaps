@@ -291,6 +291,58 @@ def temporal_fluence(rs, r, t, opt_prop: OpticalProperties):
     return PHI
 
 
+def temporal_kth_moment(rs, rd, k: int, opt_prop: OpticalProperties):
+    """Kth moment of t for the temporal point-spread function: ⟨t^k⟩ [ps^k].
+
+    Port of `temporalKthMoment.m`. Closed-form analytic for k ∈ {1, 2, 3, 4}.
+    """
+    if int(k) not in (1, 2, 3, 4):
+        raise ValueError(f"k must be in {{1,2,3,4}}; got {k}")
+    k = int(k)
+
+    rs, x0, y0, z0 = _split_source(rs)
+    rd = np.atleast_2d(np.asarray(rd, dtype=np.float64))
+
+    if rs.shape[0] > 1 and rd.shape[0] > 1:
+        raise ValueError("Cannot use multiple sources and multiple detectors")
+
+    v = C_MM_PER_PS / opt_prop.n_in
+    A = n2a(opt_prop.n_in, opt_prop.n_out)
+    D = 1.0 / (3.0 * opt_prop.musp)
+    zb = -2.0 * A * D
+    mua = opt_prop.mua
+    mueff = np.sqrt(mua / D)
+
+    rsp = np.column_stack([x0, y0, -z0 + 2.0 * zb])
+    r1 = np.linalg.norm(rd - rs, axis=1)
+    r2 = np.linalg.norm(rd - rsp, axis=1)
+
+    z0a = np.atleast_1d(z0).astype(np.float64)
+    R_C = continuous_reflectance(rs, rd, opt_prop)
+
+    if k == 1:
+        out = (
+            (z0a / r1) * np.exp(-mueff * r1)
+            + ((z0a - 2.0 * zb) / r2) * np.exp(-mueff * r2)
+        ) / (8.0 * np.pi * v * D * R_C)
+    elif k == 2:
+        out = (
+            z0a * np.exp(-mueff * r1)
+            + (z0a - 2.0 * zb) * np.exp(-mueff * r2)
+        ) / (16.0 * np.pi * (v * D) ** 2 * mueff * R_C)
+    elif k == 3:
+        out = (
+            z0a * (r1 + 1.0 / mueff) * np.exp(-mueff * r1)
+            + (z0a - 2.0 * zb) * (r2 + 1.0 / mueff) * np.exp(-mueff * r2)
+        ) / (32.0 * np.pi * D**2 * v**3 * mua * R_C)
+    else:  # k == 4
+        out = (
+            z0a * (r1**2 + 3.0 * r1 / mueff + 3.0 / mueff**2) * np.exp(-mueff * r1)
+            + (z0a - 2.0 * zb) * (r2**2 + 3.0 * r2 / mueff + 3.0 / mueff**2) * np.exp(-mueff * r2)
+        ) / (64.0 * np.pi * D ** 2.5 * mua ** 1.5 * v**4 * R_C)
+    return out
+
+
 def temporal_gate_tot_path_len(rs, rd, tg, opt_prop: OpticalProperties,
                                 *, conv_t: float = 10000.0,
                                 conv_dt: float = 1.0):

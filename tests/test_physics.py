@@ -180,3 +180,23 @@ def test_temporal_gate_part_path_len_matches_matlab(td_physics_refs):
         conv_dt=float(ref["combos_tend"]) / float(ref["combos_ndt"]),
     )
     np.testing.assert_allclose(l[0], float(ref["td_l_gate"]), rtol=1e-8)
+
+
+def test_temporal_kth_moment_matches_matlab(td_physics_refs):
+    from sensmaps.physics import temporal_kth_moment
+    ref = td_physics_refs
+    op = _td_op(ref)
+    t1 = temporal_kth_moment(ref["td_rs"], ref["td_rd"], 1, op)
+    t2 = temporal_kth_moment(ref["td_rs"], ref["td_rd"], 2, op)
+    np.testing.assert_allclose(t1, float(ref["td_kth_mom_t1"]), rtol=1e-10)
+    np.testing.assert_allclose(t2, float(ref["td_kth_mom_t2"]), rtol=1e-10)
+
+
+def test_temporal_kth_moment_rejects_k_out_of_range(td_physics_refs):
+    from sensmaps.physics import temporal_kth_moment
+    ref = td_physics_refs
+    op = _td_op(ref)
+    with pytest.raises(ValueError):
+        temporal_kth_moment(ref["td_rs"], ref["td_rd"], 5, op)
+    with pytest.raises(ValueError):
+        temporal_kth_moment(ref["td_rs"], ref["td_rd"], 0, op)
