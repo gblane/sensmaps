@@ -234,7 +234,7 @@ def test_physics_dispatch_missing_pair_raises_via_make_s():
     op = OpticalProperties()
     with pytest.raises(NotImplementedError, match="no dispatch entry"):
         make_s(
-            type_str="TD_SD_T",   # not in dispatch yet (mean ToF, deferred to v1.3)
+            type_str="TD_SS_DGI",   # SS-arrangement DGI deferred (MATLAB SD-only)
             rs=np.array([[0, 0, 0]]),
             rd=np.array([[35, 0, 0]]),
             opt_prop=op,
@@ -304,6 +304,42 @@ def test_make_s_combo_matches_matlab(combo_name, type_str, request):
         dr=float(ref["dr"]),
         pert=tuple(float(p) for p in ref["pert"]),
         fmod=fmod,
+    )
+    np.testing.assert_allclose(S, ref["S"], rtol=1e-8, atol=1e-12)
+
+
+@pytest.mark.parametrize("combo_name, type_str", [
+    ("td_sd_t", "TD_SD_T"),
+    ("td_ss_t", "TD_SS_T"),
+    ("td_ds_t", "TD_DS_T"),
+    ("td_sd_v", "TD_SD_V"),
+    ("td_ss_v", "TD_SS_V"),
+    ("td_ds_v", "TD_DS_V"),
+])
+def test_make_s_td_tv_matches_matlab(combo_name, type_str, request):
+    """TD T and V combos: tg not used; tend/ndt govern convolution window."""
+    from sensmaps.compute import make_s
+    from sensmaps.physics import OpticalProperties
+    ref = request.getfixturevalue(f"combo_ref_{combo_name}")
+
+    op = OpticalProperties(
+        n_in=float(ref["nin"]), n_out=float(ref["nout"]),
+        musp=float(ref["musp"]), mua=float(ref["mua"]),
+    )
+    rs = np.asarray(ref["rs"], dtype=float)
+    rd = np.asarray(ref["rd"], dtype=float)
+    tend = float(ref["tend_ps"])
+    ndt = int(ref["ndt"])
+
+    S, _ = make_s(
+        type_str=type_str,
+        rs=rs, rd=rd, opt_prop=op,
+        xl=(float(ref["xl"][0]), float(ref["xl"][1])),
+        yl=(float(ref["yl"][0]), float(ref["yl"][1])),
+        zl=(float(ref["zl"][0]), float(ref["zl"][1])),
+        dr=float(ref["dr"]),
+        pert=tuple(float(p) for p in ref["pert"]),
+        tend=tend, ndt=ndt,
     )
     np.testing.assert_allclose(S, ref["S"], rtol=1e-8, atol=1e-12)
 

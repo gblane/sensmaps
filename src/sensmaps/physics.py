@@ -346,7 +346,8 @@ def temporal_kth_moment(rs, rd, k: int, opt_prop: OpticalProperties):
 def temporal_kth_mom_tot_path_len(rs, rd, k: int, opt_prop: OpticalProperties):
     """Total path length L for kth moment of t. Port of temporalKthMomTotPathLen.m.
 
-    Closed-form via three calls to `temporal_kth_moment`. k ∈ {1, 2, 3}.
+    Closed-form via three calls to `temporal_kth_moment`. Effective k ∈ {1, 2, 3}
+    because the formula needs ⟨t^(k+1)⟩, and `temporal_kth_moment` caps k at 4.
     """
     v = C_MM_PER_PS / opt_prop.n_in
     t1 = temporal_kth_moment(rs, rd, 1, opt_prop)

@@ -23,7 +23,18 @@ from sensmaps.physics import (
     continuous_tot_path_len,
     temporal_gate_part_path_len,
     temporal_gate_tot_path_len,
+    temporal_kth_moment,
+    temporal_kth_mom_part_path_len,
+    temporal_kth_mom_tot_path_len,
+    temporal_var,
+    temporal_var_part_path_len,
+    temporal_var_tot_path_len,
 )
+
+
+def _scalar(x) -> float:
+    """Coerce a scalar-or-(1,) array to a Python float."""
+    return float(np.asarray(x).ravel()[0])
 
 
 @dataclass
@@ -200,6 +211,24 @@ _PHYSICS_DISPATCH: dict[tuple[str, str], tuple[Callable, Callable, Callable]] = 
                                          conv_t=conv_t, conv_dt=conv_dt),
         lambda *_a, **_kw: 1.0,
     ),
+    ("TD", "T"): (
+        lambda rs_i, rd_i, op, **_:
+            _scalar(temporal_kth_mom_tot_path_len(rs_i, rd_i, 1, op)),
+        lambda rs_i, r_all, rd_i, V, op, conv_t, conv_dt, **_:
+            temporal_kth_mom_part_path_len(rs_i, r_all, rd_i, V, 1, op,
+                                            conv_t=conv_t, conv_dt=conv_dt),
+        lambda rs_i, rd_i, op, **_:
+            _scalar(temporal_kth_moment(rs_i, rd_i, 1, op)),
+    ),
+    ("TD", "V"): (
+        lambda rs_i, rd_i, op, **_:
+            _scalar(temporal_var_tot_path_len(rs_i, rd_i, op)),
+        lambda rs_i, r_all, rd_i, V, op, conv_t, conv_dt, **_:
+            temporal_var_part_path_len(rs_i, r_all, rd_i, V, op,
+                                        conv_t=conv_t, conv_dt=conv_dt),
+        lambda rs_i, rd_i, op, **_:
+            _scalar(temporal_var(rs_i, rd_i, op)),
+    ),
 }
 
 
@@ -284,7 +313,7 @@ def make_s_full(
     key = (parsed.temporal, parsed.data_type)
     if key not in _PHYSICS_DISPATCH:
         raise NotImplementedError(
-            f"type_str={type_str!r} is not implemented in v1.2 "
+            f"type_str={type_str!r} is not implemented "
             f"(no dispatch entry for {key})"
         )
 
@@ -297,15 +326,17 @@ def make_s_full(
     conv_t: float | None = None
     conv_dt: float | None = None
     if parsed.temporal == "TD":
-        if tg is None:
-            raise ValueError(
-                f"tg is required for TD_* types (got tg=None for {type_str!r})"
-            )
-        tg_arr = np.asarray(tg, dtype=np.float64).ravel()
-        if tg_arr.size != 2:
-            raise ValueError(f"tg must be a 2-element array, got shape {tg_arr.shape}")
-        if tg_arr[1] <= tg_arr[0]:
-            raise ValueError(f"tg[1] must be > tg[0], got tg={tg_arr.tolist()}")
+        needs_tg = parsed.data_type in ("GI", "DGI")
+        if needs_tg:
+            if tg is None:
+                raise ValueError(
+                    f"tg is required for TD_*_{parsed.data_type} (got tg=None)"
+                )
+            tg_arr = np.asarray(tg, dtype=np.float64).ravel()
+            if tg_arr.size != 2:
+                raise ValueError(f"tg must be a 2-element array, got shape {tg_arr.shape}")
+            if tg_arr[1] <= tg_arr[0]:
+                raise ValueError(f"tg[1] must be > tg[0], got tg={tg_arr.tolist()}")
         if tend is None:
             tend = 10000.0
         if ndt is None:
