@@ -343,6 +343,18 @@ def temporal_kth_moment(rs, rd, k: int, opt_prop: OpticalProperties):
     return out
 
 
+def temporal_kth_mom_tot_path_len(rs, rd, k: int, opt_prop: OpticalProperties):
+    """Total path length L for kth moment of t. Port of temporalKthMomTotPathLen.m.
+
+    Closed-form via three calls to `temporal_kth_moment`. k ∈ {1, 2, 3}.
+    """
+    v = C_MM_PER_PS / opt_prop.n_in
+    t1 = temporal_kth_moment(rs, rd, 1, opt_prop)
+    tk = temporal_kth_moment(rs, rd, int(k), opt_prop)
+    tkp1 = temporal_kth_moment(rs, rd, int(k) + 1, opt_prop)
+    return -(v * (t1 * tk - tkp1)) / tk
+
+
 def temporal_gate_tot_path_len(rs, rd, tg, opt_prop: OpticalProperties,
                                 *, conv_t: float = 10000.0,
                                 conv_dt: float = 1.0):

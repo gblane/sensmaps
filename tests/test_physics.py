@@ -200,3 +200,13 @@ def test_temporal_kth_moment_rejects_k_out_of_range(td_physics_refs):
         temporal_kth_moment(ref["td_rs"], ref["td_rd"], 5, op)
     with pytest.raises(ValueError):
         temporal_kth_moment(ref["td_rs"], ref["td_rd"], 0, op)
+
+
+def test_temporal_kth_mom_tot_path_len_matches_matlab(td_physics_refs):
+    from sensmaps.physics import temporal_kth_mom_tot_path_len
+    ref = td_physics_refs
+    op = _td_op(ref)
+    L1 = temporal_kth_mom_tot_path_len(ref["td_rs"], ref["td_rd"], 1, op)
+    L2 = temporal_kth_mom_tot_path_len(ref["td_rs"], ref["td_rd"], 2, op)
+    np.testing.assert_allclose(L1, float(ref["td_kth_mom_tot_t1"]), rtol=1e-10)
+    np.testing.assert_allclose(L2, float(ref["td_kth_mom_tot_t2"]), rtol=1e-10)
