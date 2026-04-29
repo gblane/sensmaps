@@ -56,6 +56,9 @@ _COMBO_NAMES = [
     "fd_ss_i", "fd_ss_p",
     "fd_ds_i", "fd_ds_p",
     "td_sd_gi", "td_ss_gi", "td_ds_gi",
+    "td_sd_t",  "td_ss_t",  "td_ds_t",
+    "td_sd_v",  "td_ss_v",  "td_ds_v",
+    "td_sd_dgi",
 ]
 
 
