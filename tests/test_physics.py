@@ -210,3 +210,22 @@ def test_temporal_kth_mom_tot_path_len_matches_matlab(td_physics_refs):
     L2 = temporal_kth_mom_tot_path_len(ref["td_rs"], ref["td_rd"], 2, op)
     np.testing.assert_allclose(L1, float(ref["td_kth_mom_tot_t1"]), rtol=1e-10)
     np.testing.assert_allclose(L2, float(ref["td_kth_mom_tot_t2"]), rtol=1e-10)
+
+
+def test_temporal_kth_mom_part_path_len_matches_matlab(td_physics_refs):
+    from sensmaps.physics import temporal_kth_mom_part_path_len
+    ref = td_physics_refs
+    op = _td_op(ref)
+    dr = 1.0  # combos_dr
+    l1 = temporal_kth_mom_part_path_len(
+        ref["td_rs"], ref["td_r_test"], ref["td_rd"], dr**3, 1, op,
+        conv_t=float(ref["combos_tend"]),
+        conv_dt=float(ref["combos_tend"]) / float(ref["combos_ndt"]),
+    )
+    l2 = temporal_kth_mom_part_path_len(
+        ref["td_rs"], ref["td_r_test"], ref["td_rd"], dr**3, 2, op,
+        conv_t=float(ref["combos_tend"]),
+        conv_dt=float(ref["combos_tend"]) / float(ref["combos_ndt"]),
+    )
+    np.testing.assert_allclose(l1[0], float(ref["td_kth_mom_part_t1"]), rtol=1e-8)
+    np.testing.assert_allclose(l2[0], float(ref["td_kth_mom_part_t2"]), rtol=1e-8)

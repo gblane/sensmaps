@@ -459,3 +459,40 @@ def temporal_gate_part_path_len(rs, r, rd, V: float, tg,
     num = np.sum(conv_PR[:, j1:j2 + 1], axis=1) * conv_dt
 
     return (num / Rsd_g) * V
+
+
+def temporal_kth_mom_part_path_len(rs, r, rd, V: float, k: int,
+                                    opt_prop: OpticalProperties,
+                                    *, conv_t: float = 10000.0,
+                                    conv_dt: float = 1.0):
+    """Partial path length per voxel for the kth moment ⟨t^k⟩.
+
+    Port of `temporalKthMomPartPathLen.m` (FFT-conv branch, no parfor).
+    """
+    r = np.atleast_2d(np.asarray(r, dtype=np.float64))
+    k = int(k)
+
+    t = np.arange(-float(conv_t), float(conv_t) + conv_dt / 2.0, conv_dt)
+    pos = t > 0
+    n_pos = int(np.sum(pos))
+    t_pos = t[pos]
+
+    tk = float(np.asarray(temporal_kth_moment(rs, rd, k, opt_prop)).ravel()[0])
+    RC = float(np.asarray(continuous_reflectance(rs, rd, opt_prop)).ravel()[0])
+    lC = continuous_part_path_len(rs, r, rd, V, opt_prop)
+
+    PHI_pos = temporal_fluence(rs, r, t_pos, opt_prop)
+    R_pos   = temporal_reflectance(r, rd, t_pos, opt_prop)
+
+    import scipy.fft as _sfft
+    M = _sfft.next_fast_len(2 * n_pos - 1, real=True)
+    fft_PHI = _sfft.rfft(PHI_pos, n=M, axis=1, workers=-1)
+    fft_R   = _sfft.rfft(R_pos,   n=M, axis=1, workers=-1)
+    c_compact = _sfft.irfft(fft_PHI * fft_R, n=M, axis=1, workers=-1)
+    conv_PR = np.zeros((r.shape[0], n_pos), dtype=np.float64)
+    conv_PR[:, 1:] = c_compact[:, : n_pos - 1]
+
+    weighted = (t_pos ** k) * conv_PR
+    integral = np.sum(weighted, axis=1) * (conv_dt ** 2)
+    d = lC * tk - (V / RC) * integral
+    return -d / tk
