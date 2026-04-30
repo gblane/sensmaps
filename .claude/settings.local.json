@@ -18,7 +18,9 @@
       "Bash(git push *)",
       "Bash(git *)",
       "Bash(.venv/bin/pytest tests/test_physics.py -k \"var\" -v)",
-      "Bash(.venv/bin/pytest -q)"
+      "Bash(.venv/bin/pytest -q)",
+      "Bash(.venv/bin/pytest tests/test_gui.py -q)",
+      "Bash(timeout 15 .venv/bin/python -m sensmaps --smoke-test)"
     ]
   }
 }

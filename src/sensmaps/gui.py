@@ -62,6 +62,7 @@ PARAM_CLASS: dict[str, str] = {
     "dr": "expensive",
     "fmod": "expensive",                  # NEW
     "tg": "expensive",                    # NEW (v1.2)
+    "tg2": "expensive",                   # NEW (v1.3)
     "tend": "expensive",                  # NEW (v1.2)
     "ndt": "expensive",                   # NEW (v1.2)
     "td_override": "expensive",           # NEW (v1.2)
@@ -85,7 +86,8 @@ _DEFAULTS: dict[str, Any] = {
     "zl": [0.0, 25.0],
     "dr": 1.0,
     "fmod": 100.0,                  # NEW — MHz
-    "tg": [[1.0, 2.0]],             # NEW (v1.2) — ns; single-row matrix for parser reuse
+    "tg":  [[1.0, 2.0]],            # NEW (v1.2) — ns; late gate
+    "tg2": [[0.5, 1.5]],            # NEW (v1.3) — ns; early gate (DGI only)
     "tend": 10.0,                   # NEW (v1.2) — ns (matches MATLAB default 10000 ps)
     "ndt": 10000,                   # NEW (v1.2) — matches MATLAB default
     "td_override": False,           # NEW (v1.2)
@@ -160,6 +162,9 @@ class ParameterPanel:
             "FD_SD_I", "FD_SS_I", "FD_DS_I",
             "FD_SD_P", "FD_SS_P", "FD_DS_P",
             "TD_SD_GI", "TD_SS_GI", "TD_DS_GI",
+            "TD_SD_T",  "TD_SS_T",  "TD_DS_T",
+            "TD_SD_V",  "TD_SS_V",  "TD_DS_V",
+            "TD_SD_DGI",
         ]
         ttk.Label(f, text="Type").grid(row=row, column=0, sticky="w")
         self._vars["type_str"] = tk.StringVar(value="CW_SD_I")
@@ -219,12 +224,21 @@ class ParameterPanel:
         self._inputs.append(self._fmod_entry)
         row += 1
 
-        # Gate window for TD_*_GI (entered as `start; end` in ns; ps internally)
-        ttk.Label(f, text="tg [start; end] (ns)").grid(row=row, column=0, sticky="w")
+        # Gate window for TD_*_GI / TD_SD_DGI (late gate)
+        # Entered as `start; end` in ns; ps internally.
+        ttk.Label(f, text="tg (late) [start; end] (ns)").grid(row=row, column=0, sticky="w")
         self._vars["tg"] = tk.StringVar()
         self._tg_entry = ttk.Entry(f, textvariable=self._vars["tg"], width=14)
         self._tg_entry.grid(row=row, column=1, sticky="ew")
         self._inputs.append(self._tg_entry)
+        row += 1
+
+        # Early gate for TD_SD_DGI only.
+        ttk.Label(f, text="tg2 (early) [start; end] (ns)").grid(row=row, column=0, sticky="w")
+        self._vars["tg2"] = tk.StringVar()
+        self._tg2_entry = ttk.Entry(f, textvariable=self._vars["tg2"], width=14)
+        self._tg2_entry.grid(row=row, column=1, sticky="ew")
+        self._inputs.append(self._tg2_entry)
         row += 1
 
         # TD numerics (tend / ndt) — disabled by default behind override checkbox
@@ -320,7 +334,10 @@ class ParameterPanel:
 
         # TD-only fields: tg always editable for _GI; tend/ndt gated by checkbox.
         is_td = values["type_str"].startswith("TD_")
-        self._tg_entry.config(state="normal" if values["type_str"].endswith("_GI") else "disabled")
+        ends_gi  = values["type_str"].endswith("_GI")
+        ends_dgi = values["type_str"].endswith("_DGI")
+        self._tg_entry.config(state="normal" if (ends_gi or ends_dgi) else "disabled")
+        self._tg2_entry.config(state="normal" if ends_dgi else "disabled")
         self._td_override_check.config(state="normal" if is_td else "disabled")
         td_edit = is_td and values["td_override"]
         self._tend_entry.config(state="normal" if td_edit else "disabled")
@@ -349,6 +366,7 @@ class ParameterPanel:
             "dr": float(v["dr"].get()),
             "fmod": float(v["fmod"].get()),
             "tg": _parse_float_matrix(v["tg"].get(), 2),
+            "tg2": _parse_float_matrix(v["tg2"].get(), 2),
             "tend": float(v["tend"].get()),
             "ndt": int(float(v["ndt"].get())),
             "td_override": bool(v["td_override"].get()),
@@ -403,6 +421,8 @@ class ParameterPanel:
             self._vars["fmod"].set(f"{values['fmod']:g}")
         if "tg" in values:
             self._vars["tg"].set(_fmt_matrix(values["tg"]))
+        if "tg2" in values:
+            self._vars["tg2"].set(_fmt_matrix(values["tg2"]))
         if "tend" in values:
             self._vars["tend"].set(f"{values['tend']:g}")
         if "ndt" in values:
@@ -561,9 +581,13 @@ class MainWindow:
             type_str = values["type_str"]
             fmod_hz = values["fmod"] * 1e6 if type_str.startswith("FD_") else None
 
-            tg_ps = tend_ps = ndt_val = None
+            tg_ps = tg2_ps = tend_ps = ndt_val = None
             if type_str.startswith("TD_"):
-                tg_ps = np.asarray(values["tg"][0], dtype=float) * 1000.0
+                # tg only meaningful for GI / DGI; tg2 only for DGI.
+                if type_str.endswith(("_GI", "_DGI")):
+                    tg_ps = np.asarray(values["tg"][0], dtype=float) * 1000.0
+                if type_str.endswith("_DGI"):
+                    tg2_ps = np.asarray(values["tg2"][0], dtype=float) * 1000.0
                 # tend/ndt always read from form; "Override" only governs editability
                 # so the user always sees what's being used (grayed when not editing).
                 tend_ps = float(values["tend"]) * 1000.0
@@ -580,7 +604,7 @@ class MainWindow:
                 dr=values["dr"],
                 pert=tuple(values["pert"]),
                 fmod=fmod_hz,
-                tg=tg_ps, tend=tend_ps, ndt=ndt_val,
+                tg=tg_ps, tg2=tg2_ps, tend=tend_ps, ndt=ndt_val,
             )
         except (ValueError, NotImplementedError) as e:
             messagebox.showerror("Recalculate failed", str(e))
@@ -645,6 +669,7 @@ class MainWindow:
                 musp=c.opt_prop.musp, mua=c.opt_prop.mua,
                 fmod=(np.nan if c.fmod is None else c.fmod),    # NEW (v1.1)
                 tg=(np.full(2, np.nan) if c.tg is None else c.tg),   # NEW (v1.2) ps
+                tg2=(np.full(2, np.nan) if c.tg2 is None else c.tg2),# NEW (v1.3) ps
                 tend=(np.nan if c.tend is None else c.tend),         # NEW (v1.2) ps
                 ndt=(-1 if c.ndt is None else c.ndt),                # NEW (v1.2)
                 sensmaps_version=version,

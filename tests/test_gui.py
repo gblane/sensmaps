@@ -278,7 +278,7 @@ def test_param_class_classifies_fmod_as_expensive(tk_root):
     assert PARAM_CLASS["fmod"] == "expensive"
 
 
-def test_type_combobox_lists_v1_1_combos(tk_root):
+def test_type_combobox_lists_all_v1_3_combos(tk_root):
     from sensmaps.gui import ParameterPanel
     panel = ParameterPanel(master=tk_root)
     # The combobox is the first widget in panel._inputs (built first in _build_widgets).
@@ -288,6 +288,9 @@ def test_type_combobox_lists_v1_1_combos(tk_root):
         "FD_SD_I", "FD_SS_I", "FD_DS_I",
         "FD_SD_P", "FD_SS_P", "FD_DS_P",
         "TD_SD_GI", "TD_SS_GI", "TD_DS_GI",
+        "TD_SD_T",  "TD_SS_T",  "TD_DS_T",
+        "TD_SD_V",  "TD_SS_V",  "TD_DS_V",
+        "TD_SD_DGI",
     ]
     assert list(cb_type.cget("values")) == expected
 
@@ -413,6 +416,35 @@ def test_td_override_disables_tend_and_ndt_when_unchecked(tk_root):
     panel._on_var_changed("td_override")
     assert str(panel._tend_entry.cget("state")) == "normal"
     assert str(panel._ndt_entry.cget("state")) == "normal"
+
+
+def test_tg2_entry_enabled_only_for_dgi(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+
+    # GI: tg enabled, tg2 disabled.
+    panel.set_values({"type_str": "TD_SD_GI"})
+    panel._on_var_changed("type_str")
+    assert str(panel._tg_entry.cget("state")) == "normal"
+    assert str(panel._tg2_entry.cget("state")) == "disabled"
+
+    # DGI: both enabled.
+    panel.set_values({"type_str": "TD_SD_DGI"})
+    panel._on_var_changed("type_str")
+    assert str(panel._tg_entry.cget("state")) == "normal"
+    assert str(panel._tg2_entry.cget("state")) == "normal"
+
+    # T: both disabled.
+    panel.set_values({"type_str": "TD_SD_T"})
+    panel._on_var_changed("type_str")
+    assert str(panel._tg_entry.cget("state")) == "disabled"
+    assert str(panel._tg2_entry.cget("state")) == "disabled"
+
+    # CW: both disabled.
+    panel.set_values({"type_str": "CW_SD_I"})
+    panel._on_var_changed("type_str")
+    assert str(panel._tg_entry.cget("state")) == "disabled"
+    assert str(panel._tg2_entry.cget("state")) == "disabled"
 
 
 def test_recalculate_passes_tg_in_ps_for_td(tk_root, tmp_path, monkeypatch):
