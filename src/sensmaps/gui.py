@@ -588,10 +588,19 @@ class MainWindow:
                     tg_ps = np.asarray(values["tg"][0], dtype=float) * 1000.0
                 if type_str.endswith("_DGI"):
                     tg2_ps = np.asarray(values["tg2"][0], dtype=float) * 1000.0
-                # tend/ndt always read from form; "Override" only governs editability
-                # so the user always sees what's being used (grayed when not editing).
-                tend_ps = float(values["tend"]) * 1000.0
-                ndt_val = int(values["ndt"])
+                # When Override is off, ignore the form's tend/ndt entirely and
+                # use the MATLAB defaults (10000 ps, 10000 steps). Otherwise a
+                # stale value from a saved session — which the user can't fix
+                # via the greyed field — would silently break the integration.
+                if values.get("td_override", False):
+                    tend_ps = float(values["tend"]) * 1000.0
+                    ndt_val = int(values["ndt"])
+                else:
+                    tend_ps = 10000.0
+                    ndt_val = 10000
+                    # Snap the displayed value back to the default so the form
+                    # truthfully reflects what's being used.
+                    self.params_panel.set_values({"tend": 10.0, "ndt": 10000})
 
             result = make_s_full(
                 type_str=type_str,
