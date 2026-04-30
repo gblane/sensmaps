@@ -11,14 +11,14 @@ the Python companion to the MATLAB
 [`SensitivityCompendium`](https://github.com/DOIT-Lab/DOIT-Public/tree/main/SensitivityCompendium)
 that accompanies Blaney, Sassaroli & Fantini, *JIOHS* **17**(04), 2430001 (2024).
 
-v1.2 implements 12 measurement types under diffusion theory:
+v1.3 implements 19 measurement types under diffusion theory:
 - CW × {SD, SS, DS} × {I}
 - FD × {SD, SS, DS} × {I, P}
-- TD × {SD, SS, DS} × {GI}
+- TD × {SD, SS, DS} × {GI, T, V}
+- TD × {SD} × {DGI}  (DGI restricted to SD per MATLAB makeS.m)
 
-Remaining TD data types (`DGI` / `T` / `V`) land in v1.3, completing the full ~30-combo
-table from the MATLAB compendium. v1.4 adds GUI niceties (third-angle three-slice view;
-SNR thresholding/colorbar). v3 adds a Monte Carlo backend via
+v1.4 adds GUI niceties (third-angle three-slice view; SNR
+thresholding/colorbar). v3 adds a Monte Carlo backend via
 [`umcx`](https://github.com/fangq/umcx) (formerly planned as `pmcx`) and parameter
 sweeps without restructuring.
 
@@ -77,6 +77,15 @@ physics.py   →   compute.py   →   views.py   →   gui.py   →   __main__.p
   an `extra` kwargs dict per measurement that threads `fmod` (FD) or
   `tg`/`conv_t`/`conv_dt` (TD) through to the dispatch callable; existing entries
   absorb unused kwargs via `**_`.
+- v1.3 adds `("TD", "T")`, `("TD", "V")`, and `("TD", "DGI")` dispatch entries.
+  T uses `temporal_kth_moment` / `temporal_kth_mom_*_path_len` with k=1; V uses
+  the `temporal_var*` family (which composes the k=1, k=2 moment helpers). DGI
+  is computed inside its dispatch lambda as `(L|ll)(tg_late) − (L|ll)(tg_early)`,
+  routed through the SD arrangement combiner (`Svox = ll/L`). DGI is rejected for
+  non-SD arrangements to match MATLAB makeS.m. The Kth-moment closed forms support
+  k ∈ {1, 2, 3, 4}; the path-length variant needs k+1 internally so its effective
+  k caps at 3. `make_s_full` gains a kw-only `tg2` (early gate, ps); `tg` is
+  required only for GI/DGI, `tg2` only for DGI; T/V use no gate.
 
 - **`views.py`** — pure matplotlib, no Tkinter. `slice_s` (port of MATLAB `sliceS.m`) returns
   a 2D plane plus a `PlotParams` dataclass holding axis vectors and LaTeX labels. `make_color_limits`
@@ -102,6 +111,9 @@ physics.py   →   compute.py   →   views.py   →   gui.py   →   __main__.p
   `MainWindow.recalculate`. `_tg_entry` is enabled iff `type_str.endswith("_GI")`;
   `tend`/`ndt` sit behind a single "Override" checkbox so users normally inherit
   the MATLAB defaults (`tend=10000 ps`, `ndt=10000`) without typing them.
+- v1.3 adds `tg2` (early gate for DGI). State-driven enables: `_tg_entry` is
+  active for `_GI` *or* `_DGI`; `_tg2_entry` is active only for `_DGI`. Combobox
+  grows to 19 entries; T and V need no gate so both gate fields are greyed.
 
 - **`__main__.py`** — argparse + Tk mainloop. `--smoke-test` flag is used by the test suite.
 
