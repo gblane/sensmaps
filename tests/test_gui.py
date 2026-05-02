@@ -418,6 +418,27 @@ def test_td_override_disables_tend_and_ndt_when_unchecked(tk_root):
     assert str(panel._ndt_entry.cget("state")) == "normal"
 
 
+def test_view_mode_radio_state_matrix(tk_root):
+    from sensmaps.gui import ParameterPanel
+    panel = ParameterPanel(master=tk_root)
+
+    # Single mode: axis combobox + slice_value enabled, xyz disabled.
+    panel.set_values({"view_mode": "single"})
+    panel._on_var_changed("view_mode")
+    assert str(panel._slice_axis_combo.cget("state")) == "readonly"
+    assert str(panel._slice_value_entry.cget("state")) == "normal"
+    for ax in ("x", "y", "z"):
+        assert str(panel._slice_xyz_entries[ax].cget("state")) == "disabled"
+
+    # Three mode: axis combobox + slice_value disabled, xyz enabled.
+    panel.set_values({"view_mode": "three"})
+    panel._on_var_changed("view_mode")
+    assert str(panel._slice_axis_combo.cget("state")) == "disabled"
+    assert str(panel._slice_value_entry.cget("state")) == "disabled"
+    for ax in ("x", "y", "z"):
+        assert str(panel._slice_xyz_entries[ax].cget("state")) == "normal"
+
+
 def test_tg2_entry_enabled_only_for_dgi(tk_root):
     from sensmaps.gui import ParameterPanel
     panel = ParameterPanel(master=tk_root)
