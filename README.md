@@ -8,7 +8,7 @@ of a detected optical signal `Y` with respect to local absorption changes — "s
 
 This is the Python companion to the MATLAB [`SensitivityCompendium`](https://github.com/DOIT-Lab/DOIT-Public/tree/main/SensitivityCompendium) that accompanies:
 
-> G. Blaney, A. Sassaroli, and S. Fantini, *Spatial sensitivity to absorption changes for various near-infrared spectroscopy methods: A compendium review*, J. Innov. Opt. Health Sci. **17**(04), 2430001 (2024). [DOI](https://doi.org/10.1142/S1793545824300015)
+> Giles Blaney, Angelo Sassaroli, and Sergio Fantini, *Spatial sensitivity to absorption changes for various near-infrared spectroscopy methods: A compendium review*, Journal of Innovative Optical Health Sciences, Vol. 17, No. 04, 2430001 (2024). Special Issue Review Article — Open Access. [https://doi.org/10.1142/S1793545824300015](https://doi.org/10.1142/S1793545824300015)
 
 ## Status
 
