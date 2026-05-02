@@ -12,24 +12,23 @@ This is the Python companion to the MATLAB [`SensitivityCompendium`](https://git
 
 ## Status
 
-v1.3 — CW (`SD`/`SS`/`DS` × `I`), FD (`SD`/`SS`/`DS` × `I`/`P`), and
+v1.4 — CW (`SD`/`SS`/`DS` × `I`), FD (`SD`/`SS`/`DS` × `I`/`P`), and
 TD (`SD`/`SS`/`DS` × `GI`/`T`/`V` plus `SD` × `DGI`) under diffusion
-theory. Tkinter GUI, save PNG/PDF + `.npz`, multi-row optode entry,
-modulation-frequency control, gate window(s) for TD gated types.
-DGI restricted to single-distance per the MATLAB compendium.
+theory. Tkinter GUI with single-slice and third-angle three-view modes,
+save PNG/PDF + `.npz`, multi-row optode entry, modulation-frequency
+control, gate window(s) for TD gated types. DGI restricted to
+single-distance per the MATLAB compendium.
 
 ## Roadmap
 
-- **v1.4** — GUI enhancements:
-  - Option to plot all three slices (x-plane, y-plane, z-plane) simultaneously
-    in third-angle projection.
-  - Option to threshold the map based on noise and switch the colorbar from
-    `S` to SNR.
+- **v1.5** — Option to threshold the map based on noise and switch the colorbar
+  from `S` to SNR.
+- **v2** — Parameter sweeps (vary one or more inputs and aggregate results).
 - **v3** — Monte Carlo backend via [`umcx`](https://github.com/fangq/umcx)
-  (replacing the earlier `pmcx` plan), plus parameter sweeps. The four-layer
-  architecture (physics → compute → views → gui) accommodates this without
-  restructuring; only `physics.py` gains a MC-backed sibling and `compute.py`
-  picks `sim_typ` between `"DT"` and `"MC"`.
+  (replacing the earlier `pmcx` plan). The four-layer architecture
+  (physics → compute → views → gui) accommodates this without restructuring;
+  only `physics.py` gains a MC-backed sibling and `compute.py` picks `sim_typ`
+  between `"DT"` and `"MC"`.
 
 ## Install
 
@@ -73,6 +72,7 @@ sensmaps
 | Control                  | Class      | What it does                                       |
 |--------------------------|------------|----------------------------------------------------|
 | Type                     | expensive  | Measurement type (v1.3: 19 CW / FD / TD combos)    |
+| view                     | cheap      | "Single" slice or "Three" views (third-angle 2×2)  |
 | rs, rd                   | expensive  | Source / detector coordinates [mm]; multi-row via `;` |
 | n_in, n_out              | expensive  | Index of refraction inside / outside               |
 | musp, mua                | expensive  | Reduced scattering / absorption [1/mm]             |
@@ -82,7 +82,8 @@ sensmaps
 | tg2                      | expensive  | Early gate `[start; end]` [ns]; enabled iff type ends in `_DGI` |
 | tend, ndt                | expensive  | TD convolution window/steps; greyed out unless `Override` is checked |
 | pert                     | cheap      | Perturbation box size [mm]                         |
-| slice axis, value        | cheap      | Which 2D slice to display                          |
+| slice axis, value        | cheap      | Single-mode: which 2D slice to display             |
+| slice x/y/z              | cheap      | Three-mode: per-axis slice values [mm]             |
 | quantiles                | cheap      | Color-limit quantiles (lo, hi)                     |
 
 **Multi-optode formats:** `SS` accepts `(1 src, 2 dets)` *or* `(2 srcs, 1 det)`;

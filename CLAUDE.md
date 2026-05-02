@@ -17,10 +17,10 @@ v1.3 implements 19 measurement types under diffusion theory:
 - TD × {SD, SS, DS} × {GI, T, V}
 - TD × {SD} × {DGI}  (DGI restricted to SD per MATLAB makeS.m)
 
-v1.4 adds GUI niceties (third-angle three-slice view; SNR
-thresholding/colorbar). v3 adds a Monte Carlo backend via
-[`umcx`](https://github.com/fangq/umcx) (formerly planned as `pmcx`) and parameter
-sweeps without restructuring.
+v1.4 adds the third-angle three-slice view; v1.5 adds noise/SNR
+thresholding. v2 adds parameter sweeps. v3 adds a Monte Carlo backend via
+[`umcx`](https://github.com/fangq/umcx) (formerly planned as `pmcx`) without
+restructuring.
 
 ## Common commands
 
@@ -93,7 +93,10 @@ physics.py   →   compute.py   →   views.py   →   gui.py   →   __main__.p
   forced black and row 99 forced white (saturated ends). `render_slice` draws `imshow + dashed contour`
   on a caller-provided `Axes` and inverts the y-axis when the vertical axis is depth (NIRS convention).
   Contour overlay is skipped when either dimension of the plane is degenerate (matplotlib requires
-  `≥(2, 2)`).
+  `≥(2, 2)`). v1.4 adds `render_three_view(fig, S, params, slice_xyz, ...)` which builds a 2×2
+  layout (x-y, x-z, y-z slices + 3D context with the three slice planes embedded) sharing one
+  colorbar; `render_slice` now accepts kw-only `colorbar=False` / `set_title=False` for reuse
+  inside multi-panel layouts.
 
 - **`gui.py`** — Tkinter shell. `PARAM_CLASS` partitions every input parameter into `"cheap"`
   (slice axis/value, color quantiles, perturbation) vs `"expensive"` (everything that re-runs
@@ -114,6 +117,10 @@ physics.py   →   compute.py   →   views.py   →   gui.py   →   __main__.p
 - v1.3 adds `tg2` (early gate for DGI). State-driven enables: `_tg_entry` is
   active for `_GI` *or* `_DGI`; `_tg2_entry` is active only for `_DGI`. Combobox
   grows to 19 entries; T and V need no gate so both gate fields are greyed.
+- v1.4 adds a `view_mode` radio ("single" / "three") plus three per-axis slice
+  values. `MainWindow._render_to_canvas` dispatches between `PlotCanvas.show`
+  and `PlotCanvas.show_three`. View mode and slice values are all `cheap`,
+  so toggling re-renders without recomputing the physics.
 
 - **`__main__.py`** — argparse + Tk mainloop. `--smoke-test` flag is used by the test suite.
 

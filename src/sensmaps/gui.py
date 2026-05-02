@@ -32,13 +32,21 @@ class PlotCanvas:
     def show(self, *, S, params, axis: str, value: float,
              quantiles: tuple[float, float] = (0.05, 0.95),
              rs=None, rd=None, pert=(1.0, 1.0, 1.0)) -> None:
-        """Render a slice of S at (axis, value) with given color quantiles."""
+        """Render a single 2D slice."""
         plane, pp = slice_s(S, params, axis=axis, value=value)
         clim, cmap = make_color_limits(S, quantiles=quantiles)
-        # Remove any old colorbar to avoid stacking
         self._figure.clf()
         self._ax = self._figure.add_subplot(111)
         render_slice(self._ax, plane, pp, clim, cmap, rs=rs, rd=rd, pert=pert)
+        self._canvas.draw()
+
+    def show_three(self, *, S, params, slice_xyz,
+                   quantiles: tuple[float, float] = (0.05, 0.95),
+                   rs=None, rd=None, pert=(1.0, 1.0, 1.0)) -> None:
+        """Render a third-angle 2x2 layout (three slices + 3D context)."""
+        from sensmaps.views import render_three_view
+        render_three_view(self._figure, S, params, slice_xyz,
+                           rs=rs, rd=rd, pert=pert, quantiles=quantiles)
         self._canvas.draw()
 
     def clear(self) -> None:
@@ -71,6 +79,11 @@ PARAM_CLASS: dict[str, str] = {
     "slice_axis": "cheap",
     "slice_value": "cheap",
     "quantiles": "cheap",
+    # NEW (v1.4) — three-view toggle and per-axis slice values
+    "view_mode": "cheap",
+    "slice_value_x": "cheap",
+    "slice_value_y": "cheap",
+    "slice_value_z": "cheap",
 }
 
 
@@ -96,6 +109,11 @@ _DEFAULTS: dict[str, Any] = {
     "slice_axis": "y",
     "slice_value": 0.0,
     "quantiles": [0.05, 0.95],
+    # NEW (v1.4): three-view toggle and per-axis slice values
+    "view_mode": "single",          # "single" or "three"
+    "slice_value_x": 17.5,
+    "slice_value_y": 0.0,
+    "slice_value_z": 10.0,
 }
 
 
@@ -280,21 +298,51 @@ class ParameterPanel:
                         ).pack(side=tk.LEFT, padx=(4, 0))
         row += 1
 
-        # Slice
+        # View mode (v1.4) — single slice or three views.
+        ttk.Label(f, text="view").grid(row=row, column=0, sticky="w")
+        view_frame = ttk.Frame(f)
+        view_frame.grid(row=row, column=1, sticky="w")
+        self._vars["view_mode"] = tk.StringVar(value="single")
+        self._view_single_radio = ttk.Radiobutton(
+            view_frame, text="Single", value="single", variable=self._vars["view_mode"]
+        )
+        self._view_three_radio = ttk.Radiobutton(
+            view_frame, text="Three", value="three", variable=self._vars["view_mode"]
+        )
+        self._view_single_radio.pack(side=tk.LEFT)
+        self._view_three_radio.pack(side=tk.LEFT, padx=(4, 0))
+        row += 1
+
+        # Single-mode: slice axis + slice value.
         ttk.Label(f, text="slice axis").grid(row=row, column=0, sticky="w")
         self._vars["slice_axis"] = tk.StringVar(value="y")
-        cb_slice = ttk.Combobox(f, textvariable=self._vars["slice_axis"],
-                                values=["x", "y", "z"], state="readonly", width=4)
-        cb_slice.grid(row=row, column=1, sticky="w")
-        self._inputs.append(cb_slice)
+        self._slice_axis_combo = ttk.Combobox(
+            f, textvariable=self._vars["slice_axis"],
+            values=["x", "y", "z"], state="readonly", width=4
+        )
+        self._slice_axis_combo.grid(row=row, column=1, sticky="w")
+        self._inputs.append(self._slice_axis_combo)
         row += 1
 
         ttk.Label(f, text="slice value (mm)").grid(row=row, column=0, sticky="w")
         self._vars["slice_value"] = tk.StringVar()
-        en_val = ttk.Entry(f, textvariable=self._vars["slice_value"], width=10)
-        en_val.grid(row=row, column=1, sticky="w")
-        self._inputs.append(en_val)
+        self._slice_value_entry = ttk.Entry(
+            f, textvariable=self._vars["slice_value"], width=10
+        )
+        self._slice_value_entry.grid(row=row, column=1, sticky="w")
+        self._inputs.append(self._slice_value_entry)
         row += 1
+
+        # Three-mode: per-axis slice values.
+        self._slice_xyz_entries: dict[str, ttk.Entry] = {}
+        for axis in ("x", "y", "z"):
+            ttk.Label(f, text=f"slice {axis} (mm)").grid(row=row, column=0, sticky="w")
+            self._vars[f"slice_value_{axis}"] = tk.StringVar()
+            en = ttk.Entry(f, textvariable=self._vars[f"slice_value_{axis}"], width=10)
+            en.grid(row=row, column=1, sticky="w")
+            self._inputs.append(en)
+            self._slice_xyz_entries[axis] = en
+            row += 1
 
         # Color quantiles
         ttk.Label(f, text="colormap limits (quantiles) [lo hi]").grid(row=row, column=0, sticky="w")
@@ -343,6 +391,16 @@ class ParameterPanel:
         self._tend_entry.config(state="normal" if td_edit else "disabled")
         self._ndt_entry.config(state="normal" if td_edit else "disabled")
 
+        # View-mode driven enables (v1.4): single uses axis+value, three uses xyz.
+        is_three = values.get("view_mode", "single") == "three"
+        single_state = "disabled" if is_three else "normal"
+        # The combobox needs "readonly" to remain a dropdown when active.
+        self._slice_axis_combo.config(state="disabled" if is_three else "readonly")
+        self._slice_value_entry.config(state=single_state)
+        three_state = "normal" if is_three else "disabled"
+        for en in self._slice_xyz_entries.values():
+            en.config(state=three_state)
+
         if name.startswith("opt_prop."):
             self._notify("opt_prop", values["opt_prop"])
         else:
@@ -375,6 +433,10 @@ class ParameterPanel:
             "slice_axis": v["slice_axis"].get(),
             "slice_value": float(v["slice_value"].get()),
             "quantiles": _parse_float_list(v["quantiles"].get(), 2),
+            "view_mode": v["view_mode"].get(),
+            "slice_value_x": float(v["slice_value_x"].get()),
+            "slice_value_y": float(v["slice_value_y"].get()),
+            "slice_value_z": float(v["slice_value_z"].get()),
         }
 
     _VALID_KEYS = frozenset(_DEFAULTS.keys())
@@ -439,6 +501,12 @@ class ParameterPanel:
             self._vars["slice_value"].set(f"{values['slice_value']:g}")
         if "quantiles" in values:
             self._vars["quantiles"].set(_fmt_list(values["quantiles"]))
+        if "view_mode" in values:
+            self._vars["view_mode"].set(values["view_mode"])
+        for axis in ("x", "y", "z"):
+            key = f"slice_value_{axis}"
+            if key in values:
+                self._vars[key].set(f"{values[key]:g}")
 
 
 import json
@@ -555,16 +623,7 @@ class MainWindow:
                     self._cache.Svox, new_pert, self._cache.dr,
                 )
                 self._cache = _replace(self._cache, S=S_new, pert=new_pert)
-            self.plot_canvas.show(
-                S=self._cache.S,
-                params=self._cache.params,
-                axis=values["slice_axis"],
-                value=values["slice_value"],
-                quantiles=tuple(values["quantiles"]),
-                rs=self._cache.rs,
-                rd=self._cache.rd,
-                pert=self._cache.pert,
-            )
+            self._render_to_canvas(self._cache, values)
         except Exception:
             # A bad render shouldn't kill the live-update path; log to stderr.
             import traceback
@@ -621,13 +680,28 @@ class MainWindow:
         self._cache = result
         self._last_inputs = values
         self._set_dirty(False)
-        self.plot_canvas.show(
-            S=result.S, params=result.params,
-            axis=values["slice_axis"], value=values["slice_value"],
+        self._render_to_canvas(result, values)
+
+    def _render_to_canvas(self, cache, values: dict) -> None:
+        """Dispatch to the right canvas method based on view_mode."""
+        common = dict(
+            S=cache.S, params=cache.params,
             quantiles=tuple(values["quantiles"]),
-            rs=result.rs, rd=result.rd,
-            pert=result.pert,
+            rs=cache.rs, rd=cache.rd, pert=cache.pert,
         )
+        if values.get("view_mode", "single") == "three":
+            self.plot_canvas.show_three(
+                slice_xyz=(values["slice_value_x"],
+                            values["slice_value_y"],
+                            values["slice_value_z"]),
+                **common,
+            )
+        else:
+            self.plot_canvas.show(
+                axis=values["slice_axis"],
+                value=values["slice_value"],
+                **common,
+            )
 
     def revert(self) -> None:
         if self._last_inputs is None:

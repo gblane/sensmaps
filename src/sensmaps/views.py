@@ -109,7 +109,9 @@ def make_color_limits(x, quantiles=(0.05, 0.95)):
 from matplotlib.colors import ListedColormap
 
 
-def render_slice(ax, S_plane, plot_params, clim, cmap, rs=None, rd=None, pert=(1.0, 1.0, 1.0), contour_alpha=0.5):
+def render_slice(ax, S_plane, plot_params, clim, cmap, rs=None, rd=None,
+                 pert=(1.0, 1.0, 1.0), contour_alpha=0.5, *, colorbar=True,
+                 set_title=True):
     """Draw a 2D slice with dashed contour overlay on a matplotlib Axes.
 
     Port of the imagesc + contour pattern from MATLAB example1_DT.m.
@@ -151,22 +153,27 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, rs=None, rd=None, pert=(1
         interpolation="nearest",
     )
     fig = ax.figure
-    colorbar = fig.colorbar(image, ax=ax)
+    cbar = None
+    if colorbar:
+        cbar = fig.colorbar(image, ax=ax)
+        p_str = f"{pert[0]:g} x {pert[1]:g} x {pert[2]:g}"
+        cbar.set_label(
+            rf"$\mathcal{{S}}$ to a ( {p_str} ) mm$^3$ absorption perturbation"
+        )
 
-    p_str = f"{pert[0]:g} x {pert[1]:g} x {pert[2]:g}"
-    colorbar.set_label(
-        rf"$\mathcal{{S}}$ to a ( {p_str} ) mm$^3$ absorption perturbation"
-    )
+    if set_title:
+        ax.set_title(r"$\mathcal{S} = \partial \mu_{a,meas} / \partial \mu_{a,pert}$" "\n"
+                     r"fractional measurement sensitivity to absorption perturbations",
+                     fontsize=10)
 
-    ax.set_title(r"$\mathcal{S} = \partial \mu_{a,meas} / \partial \mu_{a,pert}$" "\n"
-                 r"fractional measurement sensitivity to absorption perturbations",
-                 fontsize=10)
-
-    # Contour overlay at colorbar tick values. Skip when either axis is
-    # degenerate — matplotlib.contour requires a (>=2, >=2) array.
+    # Contour overlay. Use the colorbar's tick values when available;
+    # otherwise pick 8 levels evenly across `clim`.
     contour = None
     if S_plane.shape[0] >= 2 and S_plane.shape[1] >= 2:
-        levels = [v for v in colorbar.get_ticks() if clim[0] <= v <= clim[1]]
+        if cbar is not None:
+            levels = [v for v in cbar.get_ticks() if clim[0] <= v <= clim[1]]
+        else:
+            levels = list(np.linspace(clim[0], clim[1], 8))
         if levels:
             contour = ax.contour(
                 plot_params.horz_axis, plot_params.vert_axis, S_plane,
@@ -212,6 +219,138 @@ def render_slice(ax, S_plane, plot_params, clim, cmap, rs=None, rd=None, pert=(1
     ax.set_aspect("equal", adjustable="box")
 
     return {
-        "image": image, "contour": contour, "colorbar": colorbar,
+        "image": image, "contour": contour, "colorbar": cbar,
         "sources": sources_artist, "detectors": detectors_artist
     }
+
+
+def render_three_view(fig, S, params, slice_xyz, *,
+                       rs=None, rd=None, pert=(1.0, 1.0, 1.0),
+                       quantiles=(0.05, 0.95)):
+    """Build a 2x2 third-angle projection on the given Figure.
+
+    Layout (matches paper Figs. 28/45):
+        [ x-y plane (z = sz) ] [ 3D context           ]
+        [ x-z plane (y = sy) ] [ y-z plane (x = sx)   ]
+
+    All four panels share one colormap and color limits computed once
+    from `S`. The 3D context shows the three slice planes as colored
+    quads embedded in 3D space.
+
+    Parameters
+    ----------
+    fig         : matplotlib.figure.Figure (cleared and rebuilt).
+    S           : (Nx, Ny, Nz) sensitivity volume.
+    params      : GridParams.
+    slice_xyz   : (sx, sy, sz) slice values [mm].
+    rs, rd, pert: forwarded to per-panel render_slice.
+
+    Returns
+    -------
+    dict[str, Axes] with keys "xy", "3d", "xz", "yz".
+    """
+    fig.clear()
+    sx, sy, sz = (float(v) for v in slice_xyz)
+
+    clim, cmap = make_color_limits(S, quantiles=quantiles)
+    cmap_obj = ListedColormap(cmap)
+
+    # Build 2x2 grid; cell (0,1) is 3D.
+    ax_xy = fig.add_subplot(2, 2, 1)
+    ax_3d = fig.add_subplot(2, 2, 2, projection="3d")
+    ax_xz = fig.add_subplot(2, 2, 3)
+    ax_yz = fig.add_subplot(2, 2, 4)
+
+    # 2D panels — share the precomputed clim/cmap; suppress per-panel colorbars.
+    plane_xy, pp_xy = slice_s(S, params, "z", sz)
+    render_slice(ax_xy, plane_xy, pp_xy, clim, cmap, rs=rs, rd=rd,
+                 pert=pert, colorbar=False, set_title=False)
+    ax_xy.set_title(f"$z = {pp_xy.slice_value:g}$ mm")
+
+    plane_xz, pp_xz = slice_s(S, params, "y", sy)
+    render_slice(ax_xz, plane_xz, pp_xz, clim, cmap, rs=rs, rd=rd,
+                 pert=pert, colorbar=False, set_title=False)
+    ax_xz.set_title(f"$y = {pp_xz.slice_value:g}$ mm")
+
+    plane_yz, pp_yz = slice_s(S, params, "x", sx)
+    render_slice(ax_yz, plane_yz, pp_yz, clim, cmap, rs=rs, rd=rd,
+                 pert=pert, colorbar=False, set_title=False)
+    ax_yz.set_title(f"$x = {pp_yz.slice_value:g}$ mm")
+
+    # 3D context — render each slice plane as a colored quad in 3D.
+    _render_3d_slice_planes(ax_3d, S, params, (sx, sy, sz), clim, cmap_obj,
+                             rs=rs, rd=rd)
+
+    # Shared colorbar — anchored to the 3D axes for spatial balance.
+    image_xy = ax_xy.images[0]
+    cbar = fig.colorbar(image_xy, ax=[ax_xy, ax_3d, ax_xz, ax_yz], shrink=0.85)
+    p_str = f"{pert[0]:g} x {pert[1]:g} x {pert[2]:g}"
+    cbar.set_label(
+        rf"$\mathcal{{S}}$ to a ( {p_str} ) mm$^3$ absorption perturbation"
+    )
+
+    fig.suptitle(
+        r"$\mathcal{S} = \partial \mu_{a,meas} / \partial \mu_{a,pert}$ — "
+        r"fractional measurement sensitivity (third-angle projection)",
+        fontsize=10,
+    )
+
+    return {"xy": ax_xy, "3d": ax_3d, "xz": ax_xz, "yz": ax_yz, "colorbar": cbar}
+
+
+def _render_3d_slice_planes(ax3d, S, params, slice_xyz, clim, cmap_obj,
+                             rs=None, rd=None):
+    """Render three slice planes embedded in 3D space on `ax3d`."""
+    sx, sy, sz = slice_xyz
+    x = np.asarray(params.x); y = np.asarray(params.y); z = np.asarray(params.z)
+
+    norm = _plt.Normalize(vmin=clim[0], vmax=clim[1])
+
+    def _plane_facecolors(plane_2d):
+        # plane_2d: (M, N) sampled values at the panel grid.
+        return cmap_obj(norm(plane_2d))
+
+    # x-y plane at z = sz
+    iz = int(np.argmin(np.abs(z - sz)))
+    XX, YY = np.meshgrid(x, y, indexing="ij")
+    ZZ = np.full_like(XX, float(z[iz]))
+    fc = _plane_facecolors(S[:, :, iz])
+    if XX.shape[0] >= 2 and XX.shape[1] >= 2:
+        ax3d.plot_surface(XX, YY, ZZ, facecolors=fc, shade=False,
+                           rstride=1, cstride=1, edgecolor="none",
+                           antialiased=False)
+
+    # x-z plane at y = sy
+    iy = int(np.argmin(np.abs(y - sy)))
+    XX, ZZ = np.meshgrid(x, z, indexing="ij")
+    YY = np.full_like(XX, float(y[iy]))
+    fc = _plane_facecolors(S[:, iy, :])
+    if XX.shape[0] >= 2 and XX.shape[1] >= 2:
+        ax3d.plot_surface(XX, YY, ZZ, facecolors=fc, shade=False,
+                           rstride=1, cstride=1, edgecolor="none",
+                           antialiased=False)
+
+    # y-z plane at x = sx
+    ix = int(np.argmin(np.abs(x - sx)))
+    YY, ZZ = np.meshgrid(y, z, indexing="ij")
+    XX = np.full_like(YY, float(x[ix]))
+    fc = _plane_facecolors(S[ix, :, :])
+    if YY.shape[0] >= 2 and YY.shape[1] >= 2:
+        ax3d.plot_surface(XX, YY, ZZ, facecolors=fc, shade=False,
+                           rstride=1, cstride=1, edgecolor="none",
+                           antialiased=False)
+
+    # Optodes
+    if rs is not None:
+        rs = np.atleast_2d(rs)
+        ax3d.scatter(rs[:, 0], rs[:, 1], rs[:, 2],
+                     marker="v", color="red", s=50, edgecolors="white",
+                     depthshade=False)
+    if rd is not None:
+        rd = np.atleast_2d(rd)
+        ax3d.scatter(rd[:, 0], rd[:, 1], rd[:, 2],
+                     marker="^", color="blue", s=50, edgecolors="white",
+                     depthshade=False)
+
+    ax3d.set_xlabel("$x$ (mm)"); ax3d.set_ylabel("$y$ (mm)"); ax3d.set_zlabel("$z$ (mm)")
+    ax3d.invert_zaxis()  # NIRS convention: depth grows downward

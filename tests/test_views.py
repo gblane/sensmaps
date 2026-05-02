@@ -86,3 +86,36 @@ def test_render_slice_draws_image_contour_labels(tiny_result):
     assert ax.get_xlabel() == pp.horz_label
     assert ax.get_ylabel() == pp.vert_label
     plt.close(fig)
+
+
+def test_render_three_view_builds_2x2_with_3d_panel(tiny_result):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from sensmaps.views import render_three_view
+    S, params = tiny_result
+
+    fig = plt.figure(figsize=(10, 8))
+    axes = render_three_view(fig, S, params, slice_xyz=(17.5, 0.0, 10.0))
+
+    assert set(axes) == {"xy", "3d", "xz", "yz", "colorbar"}
+    assert axes["3d"].name == "3d"
+    # All three 2D panels should have an AxesImage with the SAME clim.
+    clims = [a.images[0].get_clim() for a in (axes["xy"], axes["xz"], axes["yz"])]
+    assert clims[0] == clims[1] == clims[2]
+    plt.close(fig)
+
+
+def test_render_slice_skips_colorbar_when_disabled(tiny_result):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from sensmaps.views import make_color_limits, render_slice, slice_s
+    S, params = tiny_result
+    S_plane, pp = slice_s(S, params, axis="y", value=0.0)
+    clim, cmap = make_color_limits(S)
+
+    fig, ax = plt.subplots()
+    out = render_slice(ax, S_plane, pp, clim, cmap, colorbar=False)
+    assert out["colorbar"] is None
+    plt.close(fig)
