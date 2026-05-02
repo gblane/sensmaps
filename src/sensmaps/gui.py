@@ -32,13 +32,21 @@ class PlotCanvas:
     def show(self, *, S, params, axis: str, value: float,
              quantiles: tuple[float, float] = (0.05, 0.95),
              rs=None, rd=None, pert=(1.0, 1.0, 1.0)) -> None:
-        """Render a slice of S at (axis, value) with given color quantiles."""
+        """Render a single 2D slice."""
         plane, pp = slice_s(S, params, axis=axis, value=value)
         clim, cmap = make_color_limits(S, quantiles=quantiles)
-        # Remove any old colorbar to avoid stacking
         self._figure.clf()
         self._ax = self._figure.add_subplot(111)
         render_slice(self._ax, plane, pp, clim, cmap, rs=rs, rd=rd, pert=pert)
+        self._canvas.draw()
+
+    def show_three(self, *, S, params, slice_xyz,
+                   quantiles: tuple[float, float] = (0.05, 0.95),
+                   rs=None, rd=None, pert=(1.0, 1.0, 1.0)) -> None:
+        """Render a third-angle 2x2 layout (three slices + 3D context)."""
+        from sensmaps.views import render_three_view
+        render_three_view(self._figure, S, params, slice_xyz,
+                           rs=rs, rd=rd, pert=pert, quantiles=quantiles)
         self._canvas.draw()
 
     def clear(self) -> None:
@@ -615,16 +623,7 @@ class MainWindow:
                     self._cache.Svox, new_pert, self._cache.dr,
                 )
                 self._cache = _replace(self._cache, S=S_new, pert=new_pert)
-            self.plot_canvas.show(
-                S=self._cache.S,
-                params=self._cache.params,
-                axis=values["slice_axis"],
-                value=values["slice_value"],
-                quantiles=tuple(values["quantiles"]),
-                rs=self._cache.rs,
-                rd=self._cache.rd,
-                pert=self._cache.pert,
-            )
+            self._render_to_canvas(self._cache, values)
         except Exception:
             # A bad render shouldn't kill the live-update path; log to stderr.
             import traceback
@@ -681,13 +680,28 @@ class MainWindow:
         self._cache = result
         self._last_inputs = values
         self._set_dirty(False)
-        self.plot_canvas.show(
-            S=result.S, params=result.params,
-            axis=values["slice_axis"], value=values["slice_value"],
+        self._render_to_canvas(result, values)
+
+    def _render_to_canvas(self, cache, values: dict) -> None:
+        """Dispatch to the right canvas method based on view_mode."""
+        common = dict(
+            S=cache.S, params=cache.params,
             quantiles=tuple(values["quantiles"]),
-            rs=result.rs, rd=result.rd,
-            pert=result.pert,
+            rs=cache.rs, rd=cache.rd, pert=cache.pert,
         )
+        if values.get("view_mode", "single") == "three":
+            self.plot_canvas.show_three(
+                slice_xyz=(values["slice_value_x"],
+                            values["slice_value_y"],
+                            values["slice_value_z"]),
+                **common,
+            )
+        else:
+            self.plot_canvas.show(
+                axis=values["slice_axis"],
+                value=values["slice_value"],
+                **common,
+            )
 
     def revert(self) -> None:
         if self._last_inputs is None:
