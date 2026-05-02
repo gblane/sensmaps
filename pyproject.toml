@@ -5,7 +5,7 @@ description = "Interactive GUI for 2D sensitivity maps in diffuse optical imagin
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Giles Blaney" }]
-license = { text = "TBD" }
+license = { file = "LICENSE" }
 dependencies = [
   "numpy>=1.24",
   "scipy>=1.11",

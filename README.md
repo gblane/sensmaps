@@ -1,5 +1,8 @@
 # sensmaps
 
+> **Status: Work in progress.** Use with caution and verify outputs against
+> the MATLAB reference.
+
 Interactive Python/Tkinter GUI for exploring 2D slice maps of the Jacobian
 
 $$\mathcal{S}(\vec{r}) = \frac{\partial Y / \partial \mu_a(\vec{r})}{\partial Y / \partial \mu_{a,\text{homogeneous}}}$$
@@ -18,17 +21,6 @@ theory. Tkinter GUI with single-slice and third-angle three-view modes,
 save PNG/PDF + `.npz`, multi-row optode entry, modulation-frequency
 control, gate window(s) for TD gated types. DGI restricted to
 single-distance per the MATLAB compendium.
-
-## Roadmap
-
-- **v1.5** — Option to threshold the map based on noise and switch the colorbar
-  from `S` to SNR.
-- **v2** — Parameter sweeps (vary one or more inputs and aggregate results).
-- **v3** — Monte Carlo backend via [`umcx`](https://github.com/fangq/umcx)
-  (replacing the earlier `pmcx` plan). The four-layer architecture
-  (physics → compute → views → gui) accommodates this without restructuring;
-  only `physics.py` gains a MC-backed sibling and `compute.py` picks `sim_typ`
-  between `"DT"` and `"MC"`.
 
 ## Install
 
@@ -107,10 +99,21 @@ pytest
 
 Regression tests compare the Python port to MATLAB reference values stored as `.mat` fixtures in `tests/fixtures/`. To regenerate them, run `tests/fixtures/generate_fixtures.m` in MATLAB.
 
+## Roadmap
+
+- **v1.5** — Option to threshold the map based on noise and switch the colorbar
+  from `S` to SNR.
+- **v2** — Parameter sweeps (vary one or more inputs and aggregate results).
+- **v3** — Monte Carlo backend via [`umcx`](https://github.com/fangq/umcx)
+  (replacing the earlier `pmcx` plan). The four-layer architecture
+  (physics → compute → views → gui) accommodates this without restructuring;
+  only `physics.py` gains a MC-backed sibling and `compute.py` picks `sim_typ`
+  between `"DT"` and `"MC"`.
+
 ## License
 
-TBD — will be added before public release.
+MIT — see [LICENSE](LICENSE).
 
 ## Authorship
 
-Giles Blaney, with development assistance from Claude Code.
+Giles Blaney, PhD, with development assistance from Claude Code.
