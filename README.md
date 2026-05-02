@@ -20,16 +20,16 @@ DGI restricted to single-distance per the MATLAB compendium.
 
 ## Roadmap
 
-- **v1.4** — GUI enhancements:
-  - Option to plot all three slices (x-plane, y-plane, z-plane) simultaneously
-    in third-angle projection.
-  - Option to threshold the map based on noise and switch the colorbar from
-    `S` to SNR.
+- **v1.4** — Third-angle projection: plot the x-plane, y-plane, and z-plane
+  slices simultaneously in one figure.
+- **v1.5** — Option to threshold the map based on noise and switch the colorbar
+  from `S` to SNR.
+- **v2** — Parameter sweeps (vary one or more inputs and aggregate results).
 - **v3** — Monte Carlo backend via [`umcx`](https://github.com/fangq/umcx)
-  (replacing the earlier `pmcx` plan), plus parameter sweeps. The four-layer
-  architecture (physics → compute → views → gui) accommodates this without
-  restructuring; only `physics.py` gains a MC-backed sibling and `compute.py`
-  picks `sim_typ` between `"DT"` and `"MC"`.
+  (replacing the earlier `pmcx` plan). The four-layer architecture
+  (physics → compute → views → gui) accommodates this without restructuring;
+  only `physics.py` gains a MC-backed sibling and `compute.py` picks `sim_typ`
+  between `"DT"` and `"MC"`.
 
 ## Install
 

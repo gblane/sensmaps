@@ -17,10 +17,10 @@ v1.3 implements 19 measurement types under diffusion theory:
 - TD × {SD, SS, DS} × {GI, T, V}
 - TD × {SD} × {DGI}  (DGI restricted to SD per MATLAB makeS.m)
 
-v1.4 adds GUI niceties (third-angle three-slice view; SNR
-thresholding/colorbar). v3 adds a Monte Carlo backend via
-[`umcx`](https://github.com/fangq/umcx) (formerly planned as `pmcx`) and parameter
-sweeps without restructuring.
+v1.4 adds the third-angle three-slice view; v1.5 adds noise/SNR
+thresholding. v2 adds parameter sweeps. v3 adds a Monte Carlo backend via
+[`umcx`](https://github.com/fangq/umcx) (formerly planned as `pmcx`) without
+restructuring.
 
 ## Common commands
 
