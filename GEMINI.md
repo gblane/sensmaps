@@ -5,7 +5,7 @@ This project, `sensmaps`, is an interactive Python/Tkinter GUI for exploring 2D 
 ## Project Overview
 
 - **Purpose**: Visualization and computation of sensitivity to absorption changes ($\mathcal{S} = \partial Y / \partial \mu_a$).
-- **Status**: v1 implements CW single-distance intensity (`CW_SD_I`) under diffusion theory. Includes advanced features like optode visualization and perturbation kernel overrides.
+- **Status**: v1.2 implements 12 measurement types under diffusion theory: CW × {SD, SS, DS} × {I}, FD × {SD, SS, DS} × {I, P}, and TD × {SD, SS, DS} × {GI}. Includes advanced features like multi-row optode visualization, perturbation kernel overrides, and time-gate control.
 - **Core Technologies**: Python 3.11+, NumPy, SciPy, Matplotlib, Tkinter.
 - **Architecture**: Strictly bottom-up four-layer design:
   1. `physics.py` (NumPy): Low-level analytical formulas ported from MATLAB.
@@ -48,8 +48,15 @@ pytest tests/test_compute.py
 - **Auto-Compute on Open**: Automatically loads the last session or defaults and performs an initial computation upon launch.
 - **Enter to Recalculate**: Pressing `Enter` in any input field triggers a recalculation.
 - **Boundary Enforcement**: Sensitivity is explicitly set to zero for voxels with $z < 0$ (above the medium surface).
+- **Multi-Row Optodes**: Sources (`rs`) and detectors (`rd`) accept multi-row inputs separated by `;` (e.g., `0 0 0; 30 0 0`).
+- **Measurement Control**: 
+    - **FD**: Modulation frequency (`fmod`) in MHz.
+    - **TD**: Gate window (`tg`) in ns; `tend` and `ndt` (convolution window/steps) available via "Override".
 - **Perturbation Override**: By default, perturbation size tracks the voxel size (`dr`). An "Override" checkbox allows custom kernel dimensions.
 - **Optode Visualization**: Sources are marked with red downward triangles (`v`); detectors are marked with blue upward triangles (`^`).
+- **Exporting**:
+    - **Figures**: Save as PNG, PDF, or SVG.
+    - **Data**: Save as `.npz` containing the sensitivity matrix `S`, pre-convolution matrix `Svox`, grid axes, and all session inputs.
 - **Visual Cues**:
     - The **Recalculate** and **Revert** buttons are highlighted (bolded) when changes are pending.
     - A status indicator shows `● click recalculate` (orange) when the form is modified or `● image updated` (green) when in sync.
@@ -66,6 +73,10 @@ pytest tests/test_compute.py
 - **Layer Integrity**: No layer may import from a layer above it.
 - **No Circular Imports**: Maintain a strict one-way dependency flow.
 - **Stateless Physics**: Keep `physics.py` functions pure and NumPy-centric.
+- **Dispatch Pattern**: `compute.py` uses `_PHYSICS_DISPATCH` and `_ARRANGEMENT_COMBINE` tables to orchestrate calculations based on the `type_str` (e.g., `CW_SD_I`).
+- **Unit Boundaries**: 
+    - GUI Boundary: Frequency is in **MHz**, time/gates are in **ns**.
+    - Internal Physics: Frequency converted to **Hz**, time/gates converted to **ps** (matching MATLAB conventions).
 - **Persistent State**: The GUI saves session state to `last_session.json` on exit and reloads it on launch.
 
 ### Tool-Specific Guidance

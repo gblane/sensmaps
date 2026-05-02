@@ -234,7 +234,7 @@ def test_physics_dispatch_missing_pair_raises_via_make_s():
     op = OpticalProperties()
     with pytest.raises(NotImplementedError, match="no dispatch entry"):
         make_s(
-            type_str="TD_SD_T",   # not in dispatch yet (mean ToF, deferred to v1.3)
+            type_str="CW_SD_P",   # phase has no meaning under CW
             rs=np.array([[0, 0, 0]]),
             rd=np.array([[35, 0, 0]]),
             opt_prop=op,
@@ -309,6 +309,42 @@ def test_make_s_combo_matches_matlab(combo_name, type_str, request):
 
 
 @pytest.mark.parametrize("combo_name, type_str", [
+    ("td_sd_t", "TD_SD_T"),
+    ("td_ss_t", "TD_SS_T"),
+    ("td_ds_t", "TD_DS_T"),
+    ("td_sd_v", "TD_SD_V"),
+    ("td_ss_v", "TD_SS_V"),
+    ("td_ds_v", "TD_DS_V"),
+])
+def test_make_s_td_tv_matches_matlab(combo_name, type_str, request):
+    """TD T and V combos: tg not used; tend/ndt govern convolution window."""
+    from sensmaps.compute import make_s
+    from sensmaps.physics import OpticalProperties
+    ref = request.getfixturevalue(f"combo_ref_{combo_name}")
+
+    op = OpticalProperties(
+        n_in=float(ref["nin"]), n_out=float(ref["nout"]),
+        musp=float(ref["musp"]), mua=float(ref["mua"]),
+    )
+    rs = np.asarray(ref["rs"], dtype=float)
+    rd = np.asarray(ref["rd"], dtype=float)
+    tend = float(ref["tend_ps"])
+    ndt = int(ref["ndt"])
+
+    S, _ = make_s(
+        type_str=type_str,
+        rs=rs, rd=rd, opt_prop=op,
+        xl=(float(ref["xl"][0]), float(ref["xl"][1])),
+        yl=(float(ref["yl"][0]), float(ref["yl"][1])),
+        zl=(float(ref["zl"][0]), float(ref["zl"][1])),
+        dr=float(ref["dr"]),
+        pert=tuple(float(p) for p in ref["pert"]),
+        tend=tend, ndt=ndt,
+    )
+    np.testing.assert_allclose(S, ref["S"], rtol=1e-8, atol=1e-12)
+
+
+@pytest.mark.parametrize("combo_name, type_str", [
     ("td_sd_gi", "TD_SD_GI"),
     ("td_ss_gi", "TD_SS_GI"),
     ("td_ds_gi", "TD_DS_GI"),
@@ -339,6 +375,70 @@ def test_make_s_td_gi_matches_matlab(combo_name, type_str, request):
         tg=tg, tend=tend, ndt=ndt,
     )
     np.testing.assert_allclose(S, ref["S"], rtol=1e-8, atol=1e-12)
+
+
+def test_make_s_td_sd_dgi_matches_matlab(request):
+    """TD_SD_DGI: late minus early gate. SD-only per MATLAB."""
+    from sensmaps.compute import make_s
+    from sensmaps.physics import OpticalProperties
+    ref = request.getfixturevalue("combo_ref_td_sd_dgi")
+
+    op = OpticalProperties(
+        n_in=float(ref["nin"]), n_out=float(ref["nout"]),
+        musp=float(ref["musp"]), mua=float(ref["mua"]),
+    )
+    rs = np.asarray(ref["rs"], dtype=float)
+    rd = np.asarray(ref["rd"], dtype=float)
+    tg  = np.asarray(ref["tg_ps"],  dtype=float).ravel()
+    tg2 = np.asarray(ref["tgE_ps"], dtype=float).ravel()
+    tend = float(ref["tend_ps"])
+    ndt = int(ref["ndt"])
+
+    S, _ = make_s(
+        type_str="TD_SD_DGI",
+        rs=rs, rd=rd, opt_prop=op,
+        xl=(float(ref["xl"][0]), float(ref["xl"][1])),
+        yl=(float(ref["yl"][0]), float(ref["yl"][1])),
+        zl=(float(ref["zl"][0]), float(ref["zl"][1])),
+        dr=float(ref["dr"]),
+        pert=tuple(float(p) for p in ref["pert"]),
+        tg=tg, tg2=tg2, tend=tend, ndt=ndt,
+    )
+    np.testing.assert_allclose(S, ref["S"], rtol=1e-8, atol=1e-12)
+
+
+def test_make_s_td_dgi_ss_arrangement_rejected():
+    """Until fixture support for SS/DS DGI exists, those raise NotImplementedError."""
+    from sensmaps.compute import make_s
+    from sensmaps.physics import OpticalProperties
+    op = OpticalProperties()
+    with pytest.raises(NotImplementedError, match="DGI is only supported for SD"):
+        make_s(
+            type_str="TD_SS_DGI",
+            rs=np.array([[0, 0, 0], [30, 0, 0]]),
+            rd=np.array([[15, 0, 0]]),
+            opt_prop=op,
+            xl=(-5, 35), yl=(0, 0), zl=(0, 20),
+            dr=1.0, pert=(1.0, 1.0, 1.0),
+            tg=[1000.0, 2000.0], tg2=[500.0, 1500.0],
+            tend=10000.0, ndt=10000,
+        )
+
+
+def test_make_s_td_dgi_requires_tg2():
+    from sensmaps.compute import make_s
+    from sensmaps.physics import OpticalProperties
+    op = OpticalProperties()
+    with pytest.raises(ValueError, match="tg2.*is required"):
+        make_s(
+            type_str="TD_SD_DGI",
+            rs=np.array([[0, 0, 0]]),
+            rd=np.array([[35, 0, 0]]),
+            opt_prop=op,
+            xl=(-5, 40), yl=(0, 0), zl=(0, 20),
+            dr=1.0, pert=(1.0, 1.0, 1.0),
+            tg=[1000.0, 2000.0], tend=10000.0, ndt=10000,
+        )
 
 
 def test_make_s_td_requires_tg():

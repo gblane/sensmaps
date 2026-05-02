@@ -12,15 +12,14 @@ This is the Python companion to the MATLAB [`SensitivityCompendium`](https://git
 
 ## Status
 
-v1.2 — CW (`SD`/`SS`/`DS` × `I`), FD (`SD`/`SS`/`DS` × `I`/`P`), and
-TD (`SD`/`SS`/`DS` × `GI`) under diffusion theory. Tkinter GUI,
-save PNG/PDF + `.npz`, multi-row optode entry, modulation-frequency
-control, gate window for TD GI.
+v1.3 — CW (`SD`/`SS`/`DS` × `I`), FD (`SD`/`SS`/`DS` × `I`/`P`), and
+TD (`SD`/`SS`/`DS` × `GI`/`T`/`V` plus `SD` × `DGI`) under diffusion
+theory. Tkinter GUI, save PNG/PDF + `.npz`, multi-row optode entry,
+modulation-frequency control, gate window(s) for TD gated types.
+DGI restricted to single-distance per the MATLAB compendium.
 
 ## Roadmap
 
-- **v1.3** — Remaining TD data types (`DGI` / `T` / `V`) across `{SD, SS, DS}`,
-  completing the full ~30-combo table from the MATLAB compendium.
 - **v1.4** — GUI enhancements:
   - Option to plot all three slices (x-plane, y-plane, z-plane) simultaneously
     in third-angle projection.
@@ -73,13 +72,14 @@ sensmaps
 
 | Control                  | Class      | What it does                                       |
 |--------------------------|------------|----------------------------------------------------|
-| Type                     | expensive  | Measurement type (v1.2: 12 CW / FD / TD combos)    |
+| Type                     | expensive  | Measurement type (v1.3: 19 CW / FD / TD combos)    |
 | rs, rd                   | expensive  | Source / detector coordinates [mm]; multi-row via `;` |
 | n_in, n_out              | expensive  | Index of refraction inside / outside               |
 | musp, mua                | expensive  | Reduced scattering / absorption [1/mm]             |
 | xl, yl, zl, dr           | expensive  | Voxel-grid limits and resolution [mm]              |
 | fmod                     | expensive  | Modulation frequency [MHz]; greyed out unless type is `FD_*` |
-| tg                       | expensive  | Gate window `[start; end]` [ns]; enabled iff type ends in `_GI` |
+| tg                       | expensive  | Late gate `[start; end]` [ns]; enabled iff type ends in `_GI` or `_DGI` |
+| tg2                      | expensive  | Early gate `[start; end]` [ns]; enabled iff type ends in `_DGI` |
 | tend, ndt                | expensive  | TD convolution window/steps; greyed out unless `Override` is checked |
 | pert                     | cheap      | Perturbation box size [mm]                         |
 | slice axis, value        | cheap      | Which 2D slice to display                          |

@@ -291,6 +291,71 @@ def temporal_fluence(rs, r, t, opt_prop: OpticalProperties):
     return PHI
 
 
+def temporal_kth_moment(rs, rd, k: int, opt_prop: OpticalProperties):
+    """Kth moment of t for the temporal point-spread function: ⟨t^k⟩ [ps^k].
+
+    Port of `temporalKthMoment.m`. Closed-form analytic for k ∈ {1, 2, 3, 4}.
+    """
+    if int(k) not in (1, 2, 3, 4):
+        raise ValueError(f"k must be in {{1,2,3,4}}; got {k}")
+    k = int(k)
+
+    rs, x0, y0, z0 = _split_source(rs)
+    rd = np.atleast_2d(np.asarray(rd, dtype=np.float64))
+
+    if rs.shape[0] > 1 and rd.shape[0] > 1:
+        raise ValueError("Cannot use multiple sources and multiple detectors")
+
+    v = C_MM_PER_PS / opt_prop.n_in
+    A = n2a(opt_prop.n_in, opt_prop.n_out)
+    D = 1.0 / (3.0 * opt_prop.musp)
+    zb = -2.0 * A * D
+    mua = opt_prop.mua
+    mueff = np.sqrt(mua / D)
+
+    rsp = np.column_stack([x0, y0, -z0 + 2.0 * zb])
+    r1 = np.linalg.norm(rd - rs, axis=1)
+    r2 = np.linalg.norm(rd - rsp, axis=1)
+
+    z0a = np.atleast_1d(z0).astype(np.float64)
+    R_C = continuous_reflectance(rs, rd, opt_prop)
+
+    if k == 1:
+        out = (
+            (z0a / r1) * np.exp(-mueff * r1)
+            + ((z0a - 2.0 * zb) / r2) * np.exp(-mueff * r2)
+        ) / (8.0 * np.pi * v * D * R_C)
+    elif k == 2:
+        out = (
+            z0a * np.exp(-mueff * r1)
+            + (z0a - 2.0 * zb) * np.exp(-mueff * r2)
+        ) / (16.0 * np.pi * (v * D) ** 2 * mueff * R_C)
+    elif k == 3:
+        out = (
+            z0a * (r1 + 1.0 / mueff) * np.exp(-mueff * r1)
+            + (z0a - 2.0 * zb) * (r2 + 1.0 / mueff) * np.exp(-mueff * r2)
+        ) / (32.0 * np.pi * D**2 * v**3 * mua * R_C)
+    else:  # k == 4
+        out = (
+            z0a * (r1**2 + 3.0 * r1 / mueff + 3.0 / mueff**2) * np.exp(-mueff * r1)
+            + (z0a - 2.0 * zb) * (r2**2 + 3.0 * r2 / mueff + 3.0 / mueff**2) * np.exp(-mueff * r2)
+        ) / (64.0 * np.pi * D ** 2.5 * mua ** 1.5 * v**4 * R_C)
+    return out
+
+
+def temporal_kth_mom_tot_path_len(rs, rd, k: int, opt_prop: OpticalProperties):
+    """Total path length L for kth moment of t. Port of temporalKthMomTotPathLen.m.
+
+    Closed-form via three calls to `temporal_kth_moment`. Effective k ∈ {1, 2, 3}
+    because the formula needs ⟨t^(k+1)⟩, and `temporal_kth_moment` caps k at 4.
+    """
+    v = C_MM_PER_PS / opt_prop.n_in
+    t1 = temporal_kth_moment(rs, rd, 1, opt_prop)
+    tk = temporal_kth_moment(rs, rd, int(k), opt_prop)
+    tkp1 = temporal_kth_moment(rs, rd, int(k) + 1, opt_prop)
+    return -(v * (t1 * tk - tkp1)) / tk
+
+
 def temporal_gate_tot_path_len(rs, rd, tg, opt_prop: OpticalProperties,
                                 *, conv_t: float = 10000.0,
                                 conv_dt: float = 1.0):
@@ -395,3 +460,83 @@ def temporal_gate_part_path_len(rs, r, rd, V: float, tg,
     num = np.sum(conv_PR[:, j1:j2 + 1], axis=1) * conv_dt
 
     return (num / Rsd_g) * V
+
+
+def temporal_kth_mom_part_path_len(rs, r, rd, V: float, k: int,
+                                    opt_prop: OpticalProperties,
+                                    *, conv_t: float = 10000.0,
+                                    conv_dt: float = 1.0):
+    """Partial path length per voxel for the kth moment ⟨t^k⟩.
+
+    Port of `temporalKthMomPartPathLen.m` (FFT-conv branch, no parfor).
+    """
+    r = np.atleast_2d(np.asarray(r, dtype=np.float64))
+    k = int(k)
+
+    t = np.arange(-float(conv_t), float(conv_t) + conv_dt / 2.0, conv_dt)
+    pos = t > 0
+    n_pos = int(np.sum(pos))
+    t_pos = t[pos]
+
+    tk = float(np.asarray(temporal_kth_moment(rs, rd, k, opt_prop)).ravel()[0])
+    RC = float(np.asarray(continuous_reflectance(rs, rd, opt_prop)).ravel()[0])
+    lC = continuous_part_path_len(rs, r, rd, V, opt_prop)
+
+    PHI_pos = temporal_fluence(rs, r, t_pos, opt_prop)
+    R_pos   = temporal_reflectance(r, rd, t_pos, opt_prop)
+
+    import scipy.fft as _sfft
+    M = _sfft.next_fast_len(2 * n_pos - 1, real=True)
+    fft_PHI = _sfft.rfft(PHI_pos, n=M, axis=1, workers=-1)
+    fft_R   = _sfft.rfft(R_pos,   n=M, axis=1, workers=-1)
+    c_compact = _sfft.irfft(fft_PHI * fft_R, n=M, axis=1, workers=-1)
+    conv_PR = np.zeros((r.shape[0], n_pos), dtype=np.float64)
+    conv_PR[:, 1:] = c_compact[:, : n_pos - 1]
+
+    weighted = (t_pos ** k) * conv_PR
+    integral = np.sum(weighted, axis=1) * (conv_dt ** 2)
+    d = lC * tk - (V / RC) * integral
+    return -d / tk
+
+
+def temporal_var(rs, rd, opt_prop: OpticalProperties):
+    """Variance of t for the temporal point-spread function: ⟨t²⟩ − ⟨t⟩² [ps²].
+
+    Port of `temporalVar.m`.
+    """
+    t1 = temporal_kth_moment(rs, rd, 1, opt_prop)
+    t2 = temporal_kth_moment(rs, rd, 2, opt_prop)
+    return t2 - t1 ** 2
+
+
+def temporal_var_tot_path_len(rs, rd, opt_prop: OpticalProperties):
+    """Total path length L for variance. Port of `temporalVarTotPathLen.m`.
+
+    L = (⟨t²⟩·L₂ − 2·⟨t⟩²·L₁) / (⟨t²⟩ − ⟨t⟩²)
+    """
+    t1 = temporal_kth_moment(rs, rd, 1, opt_prop)
+    t2 = temporal_kth_moment(rs, rd, 2, opt_prop)
+    Vvar = t2 - t1 ** 2
+    L1 = temporal_kth_mom_tot_path_len(rs, rd, 1, opt_prop)
+    L2 = temporal_kth_mom_tot_path_len(rs, rd, 2, opt_prop)
+    return (t2 * L2 - 2.0 * t1 ** 2 * L1) / Vvar
+
+
+def temporal_var_part_path_len(rs, r, rd, V: float,
+                                opt_prop: OpticalProperties,
+                                *, conv_t: float = 10000.0,
+                                conv_dt: float = 1.0):
+    """Partial path length per voxel for variance. Port of `temporalVarPartPathLen.m`.
+
+    l = (⟨t²⟩·l₂ − 2·⟨t⟩²·l₁) / (⟨t²⟩ − ⟨t⟩²); NaNs → 0.
+    """
+    t1_arr = np.asarray(temporal_kth_moment(rs, rd, 1, opt_prop)).ravel()[0]
+    t2_arr = np.asarray(temporal_kth_moment(rs, rd, 2, opt_prop)).ravel()[0]
+    Vvar = t2_arr - t1_arr ** 2
+    l1 = temporal_kth_mom_part_path_len(rs, r, rd, V, 1, opt_prop,
+                                         conv_t=conv_t, conv_dt=conv_dt)
+    l2 = temporal_kth_mom_part_path_len(rs, r, rd, V, 2, opt_prop,
+                                         conv_t=conv_t, conv_dt=conv_dt)
+    out = (t2_arr * l2 - 2.0 * t1_arr ** 2 * l1) / Vvar
+    out = np.where(np.isnan(out), 0.0, out)
+    return out
