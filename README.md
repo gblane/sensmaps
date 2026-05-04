@@ -1,5 +1,6 @@
 # sensmaps
 
+> [!CAUTION]
 > **Status: Work in progress.** Use with caution and verify outputs against
 > the MATLAB reference.
 
